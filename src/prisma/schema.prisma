@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// schema.prisma
+
+model Room {
+  id   String @id @default(uuid())
+  name String  @unique
+  active Boolean  @default(false)
+
+  cameras Camera[]
+  // funeralServices FuneralService[]
+}
+
+model AuthCamera {
+  id          String   @id @default(uuid())
+  userName    String   
+  password    String   
+  ipAddress   String   
+  rtspPort    String   
+  httpPort    String   
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime?
+
+  cameras Camera[]
+}
+
+model Camera {
+  id                String          @id @default(uuid())
+  roomId            String
+  room              Room            @relation(fields: [roomId], references: [id]) 
+  authCameraId      String
+  authCamera        AuthCamera      @relation(fields: [authCameraId], references: [id])
+  name              String          @unique
+  imagePreviewUrl   String          
+  rtspUrl           String          
+  hasPTZ            Boolean         @default(false)
+  active            Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime?
+
+  movementsPTZ      MovementsPTZ[]
+  cameraOnline      CameraOnline[]
+
+  @@index([roomId])
+  @@index([authCameraId])
+}
+
+model MovementsPTZ {
+  id           String   @id @default(uuid())
+  cameraId     String
+  camera       Camera   @relation(fields: [cameraId], references: [id])
+  name         String   @unique
+  order        Int
+  endPoint     String   
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime?
+
+  @@index([cameraId])
+}
+
+model CameraOnline {
+  id                String      @id @default(uuid())
+  cameraId          String
+  camera       Camera   @relation(fields: [cameraId], references: [id])
+  folderWorkUrl     String      
+  password          String     
+  status            String      @default("ONLINE") //'ONLINE', 'DISCONNECTED', 'FAIL'
+  descriptionStatus String?     
+  current           Boolean     @default(false)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime?
+
+  @@index([cameraId])
+}

@@ -1,10 +1,20 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+
+import { RoomsModule } from './modules/rooms/rooms.module';
 
 @Module({
-  imports: [],
-  controllers: [AppController],
-  providers: [AppService],
+	imports: [
+		ConfigModule.forRoot({
+			isGlobal: true,
+		}),
+		RoomsModule
+	],
 })
-export class AppModule {}
+export class AppModule {
+	static port: number;
+
+	constructor(private readonly config: ConfigService) {
+		AppModule.port = this.config.get('APP_PORT');
+	}
+}
