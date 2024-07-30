@@ -1,5 +1,7 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { generate } from 'otp-generator';
+import { spawn } from 'child_process';
+import { promises as fs } from 'fs';
 
 import { GenerateResponseApi } from './functions.types';
 import { Messages } from '../../common/enums';
@@ -71,4 +73,38 @@ export class FunctionsService {
 			});
 		}
 	};
+
+	async execCommand(command: string): Promise<void> {
+		return new Promise((resolve, reject) => {
+		  const child = spawn(command, { shell: true });
+	
+		  child.stdout.on('data', (data) => {
+			console.log(`stdout: ${data}`);
+		  });
+	
+		  child.stderr.on('data', (data) => {
+			console.error(`stderr: ${data}`);
+		  });
+	
+		  child.on('close', (code) => {
+			if (code !== 0) {
+			  reject(new Error(`Command failed with exit code ${code}`));
+			} else {
+			  resolve();
+			}
+		  });
+		});
+	}
+
+	async ensureDirectoryExists(directoryPath: string): Promise<void> {
+		try {
+		  await fs.access(directoryPath);
+		} catch (error: any) {
+		  if (error.code === 'ENOENT') {
+			await fs.mkdir(directoryPath, { recursive: true });
+		  } else {
+			throw error;
+		  }
+		}
+	}
 }

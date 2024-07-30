@@ -24,7 +24,9 @@ model AuthCamera {
   password    String   
   ipAddress   String   
   rtspPort    String   
-  httpPort    String   
+  endPointRtsp String
+  httpPort    String  
+  endPointImagePreview String? 
   createdAt   DateTime @default(now())
   updatedAt   DateTime?
 
@@ -38,8 +40,6 @@ model Camera {
   authCameraId      String
   authCamera        AuthCamera      @relation(fields: [authCameraId], references: [id])
   name              String          @unique
-  imagePreviewUrl   String          
-  rtspUrl           String          
   hasPTZ            Boolean         @default(false)
   active            Boolean         @default(false)
   createdAt         DateTime        @default(now())
