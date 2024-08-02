@@ -9,14 +9,13 @@ import { PaginationDto } from '../../common/dtos/pagination.dto';
 @ApiTags('rooms')
 @Controller('rooms')
 export class RoomsController {
-	constructor(private readonly roomsService: RoomsService) {}
+	constructor(private readonly roomsService: RoomsService) { }
 
 	@Post()
 	create(
 		@Body() createRoomDto: CreateRoomDto,
-		@Ip() ip: string,
 	) {
-		return this.roomsService.create(createRoomDto, ip);
+		return this.roomsService.create(createRoomDto);
 	}
 
 	@Get()
@@ -32,14 +31,13 @@ export class RoomsController {
 	@Put(':id')
 	update(
 		@Param('id') id: string,
-		@Body() pdateRoomDto: UpdateRoomDto,
-		@Ip() ip: string,
+		@Body() updateRoomDto: UpdateRoomDto,
 	) {
-		return this.roomsService.update(id, pdateRoomDto, ip);
+		return this.roomsService.update(id, updateRoomDto);
 	}
 
 	@Delete(':id')
-	remove(@Param('id') id: string, @Ip() ip: string) {
-		return this.roomsService.remove(id, ip);
+	remove(@Param('id') id: string) {
+		return this.roomsService.remove(id);
 	}
 }

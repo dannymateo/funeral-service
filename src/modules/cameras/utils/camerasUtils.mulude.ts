@@ -5,6 +5,7 @@ import { FunctionsModule } from '../../functions/functions.module';
 
 @Module({
 	imports: [FunctionsModule],
+    providers: [CameraUtilsService], 
     exports: [CameraUtilsService]
 })
 export class CamerasUtilsModule {}

@@ -12,29 +12,43 @@ export class RoomsService {
 	constructor(
 		private readonly prisma: PrismaService,
 		private readonly functions: FunctionsService,
-	) {}
+	) { }
 
-	async create(createRoomDto: CreateRoomDto, ip: string) {
+	async create(createRoomDto: CreateRoomDto) {
 		try {
-			const { name, active } = createRoomDto;
+			const { name, active, headquarterId } = createRoomDto;
 
-			const duplicateRoom = await this.prisma.room.findUnique({
+			// Verificar si la habitación existe y está activa
+			const existHeadquarter = await this.prisma.headquarter.findUnique({
+				where: { id: headquarterId, active: true },
+			});
+
+			if (!existHeadquarter || !existHeadquarter.active) {
+				this.functions.generateResponseApi({
+					status: HttpStatus.NOT_FOUND,
+					message: `${Messages.ERROR_CREATING} "La sede que se está asociando no existe o está inactiva."`,
+				});
+			}
+
+			const duplicateRoom = await this.prisma.room.findFirst({
 				where: {
 					name,
+					headquarterId: headquarterId
 				},
 			});
 
 			if (duplicateRoom) {
 				this.functions.generateResponseApi({
 					status: HttpStatus.CONFLICT,
-					message: `${Messages.ERROR_CREATING} "There is already a room with this name".`,
+					message: `${Messages.ERROR_CREATING} "Ya existe una sala con este nombre para esta sede."`,
 				});
 			}
 
 			const roomData = await this.prisma.room.create({
 				data: {
 					name,
-					active
+					active,
+					headquarterId
 				},
 			});
 
@@ -55,27 +69,30 @@ export class RoomsService {
 			const { search, page, pageSize } = query;
 
 			const searchCondition = search && search.trim() !== ''
-			? { name: { contains: search.toLowerCase() } }
-			: {}; // No aplicar filtro si `search` es vacío o nulo
-		  
-		  const [rooms, total] = await this.prisma.$transaction([
-			this.prisma.room.findMany({
-			  where: searchCondition, // Aplica el filtro si existe `searchCondition`
-			  select: {
-				id: true,
-				name: true,
-				active: true,
-			  },
-			  orderBy: {
-				name: 'asc',
-			  },
-			  skip: page > 0 ? (page - 1) * pageSize : 0,
-			  take: pageSize,
-			}),
-			this.prisma.room.count({
-			  where: searchCondition, // Aplica el filtro si existe `searchCondition`
-			}),
-		  ]);
+				? { name: { contains: search.toLowerCase() } }
+				: {}; // No aplicar filtro si `search` es vacío o nulo
+
+			const [rooms, total] = await this.prisma.$transaction([
+				this.prisma.room.findMany({
+					where: searchCondition, // Aplica el filtro si existe `searchCondition`
+					include: {
+						headquarter: {
+							select: {
+								name: true,
+							},
+						},
+					},
+					orderBy: {
+						name: 'asc',
+					},
+					skip: page > 0 ? (page - 1) * pageSize : 0,
+					take: pageSize,
+				}),
+				this.prisma.room.count({
+					where: searchCondition, // Aplica el filtro si existe `searchCondition`
+				}),
+			]);
+
 
 			const totalPages = Math.ceil(total / query.pageSize);
 
@@ -106,18 +123,14 @@ export class RoomsService {
 
 	async findOne(id: string) {
 		try {
-			const category = await this.prisma.room.findUnique({
+			const room = await this.prisma.room.findUnique({
 				where: {
 					id,
 				},
-				select: {
-					id: true,
-					name: true,
-					active: true
-				},
+				include: { headquarter: true }
 			});
 
-			if (!category) {
+			if (!room) {
 				this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: Messages.NO_DATA_FOUND,
@@ -127,7 +140,7 @@ export class RoomsService {
 			this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
-				data: [category],
+				data: [room],
 			});
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
@@ -135,47 +148,61 @@ export class RoomsService {
 		}
 	}
 
-	async update(id: string, updateRoomDto: UpdateRoomDto, ip: string) {
+	async update(id: string, updateRoomDto: UpdateRoomDto) {
 		try {
-			const { name, active } = updateRoomDto;
+			const { name, active, headquarterId } = updateRoomDto;
+
+			// Verificar si la habitación existe y está activa
+			const existHeadquarter = await this.prisma.headquarter.findUnique({
+				where: { id: headquarterId, active: true },
+			});
+
+			if (!existHeadquarter || !existHeadquarter.active) {
+				this.functions.generateResponseApi({
+					status: HttpStatus.NOT_FOUND,
+					message: `${Messages.ERROR_CREATING} "La sede que se está asociando no existe o está inactiva."`,
+				});
+			}
 
 			const [duplicateRoom, actualRoom] = await this.prisma.$transaction([
 				this.prisma.room.findFirst({
-				  where: {
-					name,
-					id: {
-					  not: id,
+					where: {
+						name,
+						headquarterId,
+						id: {
+							not: id,
+						},
 					},
-				  },
 				}),
 				this.prisma.room.findUnique({
-				  where: {
-					id,
-				  },
+					where: {
+						id,
+					},
 				}),
-			  ]);
+			]);
 
 			if (duplicateRoom) {
 				this.functions.generateResponseApi({
 					status: HttpStatus.CONFLICT,
-					message: `${Messages.ERROR_UPDATING} "There is already a room with this name".`,
+					message: `${Messages.ERROR_CREATING} "Ya existe una sala con este nombre para esta sede."`,
 				});
 			}
 
 			if (!actualRoom) {
 				this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
-					message: `${Messages.ERROR_UPDATING} "Room not found".`,
+					message: `${Messages.ERROR_UPDATING} "Sala no encontrada".`,
 				});
 			}
 
-			const categoryData = await this.prisma.room.update({
+			const roomData = await this.prisma.room.update({
 				where: {
 					id,
 				},
 				data: {
 					name,
-					active
+					active,
+					headquarterId
 				},
 			});
 
@@ -183,7 +210,7 @@ export class RoomsService {
 				ok: true,
 				status: HttpStatus.OK,
 				message: Messages.SUCCESSFULLY_UPDATED,
-				data: [categoryData],
+				data: [roomData]
 			});
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
@@ -191,27 +218,50 @@ export class RoomsService {
 		}
 	}
 
-	async remove(id: string, ip: string) {
+	async remove(id: string) {
 		try {
+			// Verificar si la sala existe
 			const actualRoom = await this.prisma.room.findUnique({
-				where: {
-					id,
-				},
+				where: { id },
 			});
 
 			if (!actualRoom) {
 				this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
-					message: `${Messages.ERROR_DELETING} "Room not found".`,
+					message: Messages.NO_DATA_FOUND,
 				});
 			}
 
-			const roomData = await this.prisma.room.delete({
-				where: {
-					id,
-				},
+			// Verificar si la sala tiene cámaras asociadas
+			const associatedCameras = await this.prisma.camera.findFirst({
+				where: { roomId: id },
 			});
 
+			if (associatedCameras) {
+				this.functions.generateResponseApi({
+					status: HttpStatus.CONFLICT,
+					message: `${Messages.ERROR_CREATING} "Existen camaras asociadas a esta sala, primero remueva las cámaras para continuar".`,
+				});
+			}
+
+			// Verificar si la cámara tiene online asociadas y activos
+			const associatedService = await this.prisma.service.findFirst({
+				where: { roomId: id, current: true },
+			});
+
+			if (associatedService) {
+				this.functions.generateResponseApi({
+					status: HttpStatus.CONFLICT,
+					message: `${Messages.ERROR_CREATING} "Existe un servicio activo asociado a esta sala, primero remuevalo para continuar".`,
+				});
+			}
+
+			// Eliminar la sala
+			await this.prisma.room.delete({
+				where: { id },
+			});
+
+			// Respuesta de éxito
 			this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,

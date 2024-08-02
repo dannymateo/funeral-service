@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, MinLength, MaxLength, IsBoolean } from 'class-validator';
+import { IsString, MinLength, MaxLength, IsBoolean, IsUUID } from 'class-validator';
 
 export class CreateRoomDto {
 	@ApiProperty({
@@ -17,4 +17,11 @@ export class CreateRoomDto {
 	})
 	@IsBoolean({ message: 'Active must be a logical value' })
 	readonly active: boolean;
+
+	@ApiProperty({
+		description: 'ID of the headquardter where the camera is located',
+		example: 'uuid',
+	  })
+	  @IsUUID('4', { message: 'HeadquardterId must be a valid UUID' })
+	  readonly headquarterId: string;
 }

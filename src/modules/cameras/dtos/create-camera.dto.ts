@@ -1,7 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsBoolean, IsUrl, IsUUID, IsInt, MinLength, MaxLength, Min, Max } from 'class-validator';
+import { IsString, IsBoolean, IsUrl, IsUUID, IsInt, MinLength, MaxLength, Min, Max, ValidateNested, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
 
-export class AuthCameraDto {
+export class CreateAuthCameraDto {
   @ApiProperty({
     description: 'Username for camera authentication',
     example: 'admin',
@@ -37,10 +38,12 @@ export class AuthCameraDto {
   readonly rtspPort: number;
 
   @ApiProperty({
-    description: 'End Point of the RTPSP',
+    description: 'End Point of the RTSP',
     example: '/Streaming/Channels/1',
   })
-  @IsUrl({}, { message: 'RTSP URL must be a valid URL' })
+  @IsString({ message: 'endPointRtsp is required' })
+  @MinLength(3, { message: 'endPointRtsp must be at least 3 characters long' })
+  @MaxLength(100, { message: 'endPointRtsp must be at most 100 characters long' })
   readonly endPointRtsp: string;
 
   @ApiProperty({
@@ -56,8 +59,39 @@ export class AuthCameraDto {
     description: 'End Point of the image preview',
     example: '/Streaming/channels/1/picture',
   })
-  @IsUrl({}, { message: 'Image preview URL must be a valid URL' })
+  @IsString({ message: 'endPointImagePreview is required' })
+  @MinLength(3, { message: 'endPointImagePreview must be at least 3 characters long' })
+  @MaxLength(100, { message: 'endPointImagePreview must be at most 100 characters long' })
   readonly endPointImagePreview?: string;
+}
+
+export class CreateMovementsPTZDto {
+  @ApiProperty({
+    description: 'Name of the PTZ movement',
+    example: 'Preset 1',
+  })
+  @IsString({ message: 'Name is required' })
+  @MinLength(3, { message: 'Name must be at least 3 characters long' })
+  @MaxLength(50, { message: 'Name must be at most 50 characters long' })
+  readonly name: string;
+
+  @ApiProperty({
+    description: 'Order of the PTZ movement',
+    example: 1,
+  })
+  @IsInt({ message: 'Order must be an integer' })
+  @Min(1, { message: 'Order must be at least 1' })
+  @Max(999, { message: 'Order must be at most 999' })
+  readonly order: number;
+
+  @ApiProperty({
+    description: 'End point of the PTZ movement command',
+    example: '/ptz/preset/1/goto',
+  })
+  @IsString({ message: 'EndPoint is required' })
+  @MinLength(3, { message: 'EndPoint must be at least 3 characters long' })
+  @MaxLength(200, { message: 'EndPoint must be at most 200 characters long' })
+  readonly endPoint: string;
 }
 
 export class CreateCameraDto {
@@ -93,6 +127,18 @@ export class CreateCameraDto {
 
   @ApiProperty({
     description: 'Authentication details for the camera',
+    type: CreateAuthCameraDto,
   })
-  readonly authCamera: AuthCameraDto;
+  @ValidateNested()
+  @Type(() => CreateAuthCameraDto)
+  readonly authCamera: CreateAuthCameraDto;
+
+  @ApiProperty({
+    description: 'List of the PTZ movements',
+    type: [CreateMovementsPTZDto],
+  })
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => CreateMovementsPTZDto)
+  readonly movementsPTZ?: CreateMovementsPTZDto[];
 }

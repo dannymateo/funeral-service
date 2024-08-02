@@ -1,6 +1,6 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { promises as fs } from 'fs';
-import path from 'path';
+import * as path from 'path';
 
 import { FunctionsService } from '../../functions/functions.service';
 import { Messages } from 'src/common/enums';
@@ -19,29 +19,32 @@ export class CameraUtilsService {
     const serviceFilePath = path.join(BASE_PATH_SERVICE, `camOnline-${id}.service`);
 
     const scriptContent = `#!/bin/bash
-      NOTIFY_URL="http://localhost:3000/notifyAlert/${id}"
-      send_notification() {
-        local message="$1"
-        curl -X POST -H "Content-Type: application/json" -d "{\\"message\\": \\"$message\\"}" $NOTIFY_URL
-      }
-      while true; do
-        ffmpeg -i ${rtspUrl} \\
-          -s 854x480 \\
-          -c:v libx264 \\
-          -b:v 800k \\
-          -tune zerolatency \\
-          -preset ultrafast \\
-          -hls_time 5 \\
-          -hls_list_size 1 \\
-          -hls_flags delete_segments \\
-          ${path.join(cameraPathLive, 'stream.m3u8')}
-        if [ $? -ne 0 ]; then
-          send_notification "FFmpeg failed to start streaming from ${rtspUrl}."
-          sleep 5
-        else
-          break
-        fi
-      done`;
+    NOTIFY_URL="http://localhost:3000/api/v1/cameras/cameraFail/${id}"
+    
+    send_notification() {
+      local message="$1"
+      curl -X PATCH -H "Content-Type: application/json" -d "{\"message\": \"$message\"}" "$NOTIFY_URL"
+    }
+    
+    while true; do
+      ffmpeg -i "${rtspUrl}" \\
+        -s 854x480 \\
+        -c:v libx264 \\
+        -b:v 800k \\
+        -tune zerolatency \\
+        -preset ultrafast \\
+        -hls_time 5 \\
+        -hls_list_size 1 \\
+        -hls_flags delete_segments \\
+        "${path.join(cameraPathLive, 'stream.m3u8')}"
+      
+      if [ $? -ne 0 ]; then
+        send_notification "FFmpeg failed to start streaming from ${rtspUrl}."
+        sleep 5
+      else
+        break
+      fi
+    done`;    
 
     const serviceContent = `[Unit]
       Description=Servicio para iniciar el script cameraOnline-${id}.sh

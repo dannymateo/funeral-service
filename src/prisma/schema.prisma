@@ -9,13 +9,30 @@ datasource db {
 
 // schema.prisma
 
-model Room {
+model Headquarter {
   id   String @id @default(uuid())
   name String  @unique
   active Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime? @updatedAt
+
+  rooms Room[]
+}
+
+model Room {
+  id   String @id @default(uuid())
+  headquarterId            String
+  headquarter              Headquarter            @relation(fields: [headquarterId], references: [id]) 
+  name String
+  active Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime? @updatedAt
 
   cameras Camera[]
-  // funeralServices FuneralService[]
+  serviceS Service[]
+
+  @@unique([name, headquarterId])
+
 }
 
 model AuthCamera {
@@ -28,7 +45,7 @@ model AuthCamera {
   httpPort    String  
   endPointImagePreview String? 
   createdAt   DateTime @default(now())
-  updatedAt   DateTime?
+  updatedAt   DateTime? @updatedAt
 
   cameras Camera[]
 }
@@ -43,7 +60,7 @@ model Camera {
   hasPTZ            Boolean         @default(false)
   active            Boolean         @default(false)
   createdAt         DateTime        @default(now())
-  updatedAt         DateTime?
+  updatedAt   DateTime? @updatedAt
 
   movementsPTZ      MovementsPTZ[]
   cameraOnline      CameraOnline[]
@@ -56,12 +73,14 @@ model MovementsPTZ {
   id           String   @id @default(uuid())
   cameraId     String
   camera       Camera   @relation(fields: [cameraId], references: [id])
-  name         String   @unique
-  order        Int
+  name         String   
+  order        Int     
   endPoint     String   
   createdAt    DateTime @default(now())
-  updatedAt    DateTime?
+  updatedAt    DateTime? @updatedAt
 
+  @@unique([name, cameraId])
+  @@unique([cameraId, order])
   @@index([cameraId])
 }
 
@@ -69,13 +88,28 @@ model CameraOnline {
   id                String      @id @default(uuid())
   cameraId          String
   camera       Camera   @relation(fields: [cameraId], references: [id])
-  folderWorkUrl     String      
+  endPointStreaming     String      
   password          String     
-  status            String      @default("ONLINE") //'ONLINE', 'DISCONNECTED', 'FAIL'
+  status            String      @default("OFFLINE") // 'OFFLINE', 'ONLINE', 'FAIL'
   descriptionStatus String?     
   current           Boolean     @default(false)
   createdAt         DateTime    @default(now())
-  updatedAt         DateTime?
+  updatedAt   DateTime? @updatedAt
 
   @@index([cameraId])
+}
+
+model Service {
+  id                String      @id @default(uuid())
+  roomId            String
+  room              Room            @relation(fields: [roomId], references: [id]) 
+  // HasPersonalization           Boolean     @default(false) //Indica si tiene personalización
+  // HasInteractive           Boolean     @default(false) //Indica si es interactivo
+  // HasReminder           Boolean     @default(false) //Indica si es interactivo
+  hasStreaming           Boolean     @default(false) //Indica si es streaming
+  current           Boolean     @default(false)
+  startAt         DateTime    @default(now())
+  endAt   DateTime 
+  createdAt         DateTime    @default(now())
+  updatedAt   DateTime? @updatedAt
 }
