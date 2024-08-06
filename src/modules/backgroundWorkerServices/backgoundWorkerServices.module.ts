@@ -10,4 +10,4 @@ import { BackgroundWorkerStreamingService } from './backgroundworkerStraming.ser
   providers: [BackgroundWorkerStreamingService],
   exports: [BackgroundWorkerStreamingService],
 })
-export class BackgroundWorkerServices {}
+export class BackgroundWorkerServices { }

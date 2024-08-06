@@ -19,89 +19,90 @@ export class ServicesService {
 		const { roomId, hasStreaming, startAt, endAt } = createServiceDto;
 
 		try {
-			const existRoom = await this.prisma.room.findUnique({
-				where: { id: roomId },
-				select: { active: true }
-			});
+			const [existRoom, existingService] = await this.prisma.$transaction([
+				this.prisma.room.findUnique({
+					where: { id: roomId },
+					select: { active: true },
+				}),
+				this.prisma.service.findFirst({
+					where: {
+						roomId,
+						AND: [
+							{ startAt: { lt: endAt } },
+							{ endAt: { gt: startAt } },
+						],
+					},
+				}),
+			]);
 
 			if (!existRoom || !existRoom.active) {
 				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: `${Messages.ERROR_CREATING} "La sala que se está asociando no existe o está inactiva."`,
-				});
+				}, 'HttpException');
 			}
-
-			// Verificar si hay servicios existentes en la misma sala entre las fechas especificadas
-			const existingService = await this.prisma.service.findFirst({
-				where: {
-					roomId,
-					AND: [
-						{ startAt: { lt: endAt } },
-						{ endAt: { gt: startAt } }
-					]
-				}
-			});
 
 			if (existingService) {
 				return this.functions.generateResponseApi({
 					status: HttpStatus.CONFLICT,
 					message: `${Messages.ERROR_CREATING} "Ya existe un servicio en la sala durante el período especificado."`,
-				});
+				}, 'HttpException');
 			}
 
-			const service = await this.prisma.service.create({
-				data: { roomId, hasStreaming, startAt, endAt }
-			});
-
-			if (hasStreaming) {
-				// Buscar una cámara asociada a la sala
-				const camera = await this.prisma.camera.findFirst({
-					where: { roomId },
-					select: { id: true }
+			// Utilizamos una transacción para asegurar que todas las operaciones se realicen correctamente
+			const [service, cameraOnline] = await this.prisma.$transaction(async (prisma) => {
+				// Crear el servicio
+				const service = await prisma.service.create({
+					data: { roomId, hasStreaming, startAt, endAt },
 				});
 
-				if (!camera) {
-					return this.functions.generateResponseApi({
-						status: HttpStatus.CONFLICT,
-						message: `${Messages.ERROR_CREATING} "No hay una cámara asociada a esta sala."`,
+				if (hasStreaming) {
+					// Buscar una cámara asociada a la sala
+					const camera = await prisma.camera.findFirst({
+						where: { roomId },
+						select: { id: true },
 					});
+
+					if (!camera) {
+						throw new Error(`${Messages.ERROR_CREATING} "No hay una cámara asociada a esta sala."`);
+					}
+
+					// Generar y encriptar la contraseña
+					const randomPassword = this.functions.generateOTP('code');
+					const hashedPassword = await hash(randomPassword, 10);
+
+					// Crear el registro en cameraOnline
+					await prisma.cameraOnline.create({
+						data: {
+							cameraId: camera.id,
+							endPointStreaming: `/live/${camera.id}/stream.m3u8`,
+							password: hashedPassword,
+						},
+					});
+
+					return [service, { password: randomPassword }];
 				}
 
-				// Generar y encriptar la contraseña
-				const randomPassword = this.functions.generateOTP('code');
-				const hashedPassword = await hash(randomPassword, 10);
+				return [service];
+			});
 
-				// Crear el registro en cameraOnline
-				await this.prisma.cameraOnline.create({
-					data: {
-						cameraId: camera.id,
-						endPointStreaming: `/live/${camera.id}/stream.m3u8`,
-						password: hashedPassword
-					}
-				});
-
-				return this.functions.generateResponseApi({
-					ok: true,
-					status: HttpStatus.CREATED,
-					message: Messages.SUCCESSFULLY_CREATED,
-					data: [
-						service,
-						{ password: randomPassword }
-					]
-				}, 'Objet');
-			}
-
-			// Respuesta para el caso sin streaming
 			this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.CREATED,
 				message: Messages.SUCCESSFULLY_CREATED,
-				data: [service]
+				data: cameraOnline ? [service, cameraOnline] : [service],
 			}, 'Objet');
 
 		} catch (error) {
-			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			if (error instanceof HttpException) {
+				throw error;
+			} else {
+				return this.functions.generateResponseApi({
+					ok: false,
+					status: HttpStatus.INTERNAL_SERVER_ERROR,
+					message: `Error al crear el servicio: ${error.message}`,
+				}, 'HttpException');
+			}
 		}
 	}
 
@@ -189,110 +190,110 @@ export class ServicesService {
 	// 	}
 	// }
 
-	async update(id: string, updateServiceDto: UpdateServiceDto) {
-		const { roomId, hasStreaming, startAt, endAt } = updateServiceDto;
+	// async update(id: string, updateServiceDto: UpdateServiceDto) {
+	// 	const { roomId, hasStreaming, startAt, endAt } = updateServiceDto;
 
-		try {
-			// Verificar si el servicio existe
-			const existingService = await this.prisma.service.findUnique({
-				where: { id }
-			});
+	// 	try {
+	// 		// Verificar si el servicio existe
+	// 		const existingService = await this.prisma.service.findUnique({
+	// 			where: { id }
+	// 		});
 
-			if (!existingService) {
-				this.functions.generateResponseApi({
-					status: HttpStatus.NOT_FOUND,
-					message: `${Messages.ERROR_UPDATING} "El servicio que se está intentando actualizar no existe."`,
-				});
-			}
+	// 		if (!existingService) {
+	// 			this.functions.generateResponseApi({
+	// 				status: HttpStatus.NOT_FOUND,
+	// 				message: `${Messages.ERROR_UPDATING} "El servicio que se está intentando actualizar no existe."`,
+	// 			});
+	// 		}
 
-			// Verificar si la habitación existe y está activa
-			const existRoom = await this.prisma.room.findUnique({
-				where: { id: roomId },
-				select: { active: true }
-			});
+	// 		// Verificar si la habitación existe y está activa
+	// 		const existRoom = await this.prisma.room.findUnique({
+	// 			where: { id: roomId },
+	// 			select: { active: true }
+	// 		});
 
-			if (!existRoom || !existRoom.active) {
-				this.functions.generateResponseApi({
-					status: HttpStatus.NOT_FOUND,
-					message: `${Messages.ERROR_UPDATING} "La sala que se está asociando no existe o está inactiva."`,
-				});
-			}
+	// 		if (!existRoom || !existRoom.active) {
+	// 			this.functions.generateResponseApi({
+	// 				status: HttpStatus.NOT_FOUND,
+	// 				message: `${Messages.ERROR_UPDATING} "La sala que se está asociando no existe o está inactiva."`,
+	// 			});
+	// 		}
 
-			// Verificar si hay servicios existentes en la misma sala entre las fechas especificadas
-			const conflictingService = await this.prisma.service.findFirst({
-				where: {
-					roomId,
-					AND: [
-						{ startAt: { lt: endAt } },
-						{ endAt: { gt: startAt } },
-						{ id: { not: id } }
-					]
-				}
-			});
+	// 		// Verificar si hay servicios existentes en la misma sala entre las fechas especificadas
+	// 		const conflictingService = await this.prisma.service.findFirst({
+	// 			where: {
+	// 				roomId,
+	// 				AND: [
+	// 					{ startAt: { lt: endAt } },
+	// 					{ endAt: { gt: startAt } },
+	// 					{ id: { not: id } }
+	// 				]
+	// 			}
+	// 		});
 
-			if (conflictingService) {
-				return this.functions.generateResponseApi({
-					status: HttpStatus.CONFLICT,
-					message: `${Messages.ERROR_UPDATING} "Ya existe un servicio en la sala durante el período especificado."`,
-				});
-			}
+	// 		if (conflictingService) {
+	// 			return this.functions.generateResponseApi({
+	// 				status: HttpStatus.CONFLICT,
+	// 				message: `${Messages.ERROR_UPDATING} "Ya existe un servicio en la sala durante el período especificado."`,
+	// 			});
+	// 		}
 
-			// Actualizar el servicio
-			const updatedService = await this.prisma.service.update({
-				where: { id },
-				data: { roomId, hasStreaming, startAt, endAt }
-			});
+	// 		// Actualizar el servicio
+	// 		const updatedService = await this.prisma.service.update({
+	// 			where: { id },
+	// 			data: { roomId, hasStreaming, startAt, endAt }
+	// 		});
 
-			if (hasStreaming) {
-				// Buscar una cámara asociada a la sala
-				const camera = await this.prisma.camera.findFirst({
-					where: { roomId },
-					select: { id: true }
-				});
+	// 		if (hasStreaming) {
+	// 			// Buscar una cámara asociada a la sala
+	// 			const camera = await this.prisma.camera.findFirst({
+	// 				where: { roomId },
+	// 				select: { id: true }
+	// 			});
 
-				if (!camera) {
-					return this.functions.generateResponseApi({
-						status: HttpStatus.CONFLICT,
-						message: `${Messages.ERROR_UPDATING} "No hay una cámara asociada a esta sala."`,
-					});
-				}
+	// 			if (!camera) {
+	// 				return this.functions.generateResponseApi({
+	// 					status: HttpStatus.CONFLICT,
+	// 					message: `${Messages.ERROR_UPDATING} "No hay una cámara asociada a esta sala."`,
+	// 				});
+	// 			}
 
-				// Generar y encriptar la nueva contraseña si es necesario
-				const randomPassword = this.functions.generateOTP('password');
-				const hashedPassword = await hash(randomPassword, 10);
+	// 			// Generar y encriptar la nueva contraseña si es necesario
+	// 			const randomPassword = this.functions.generateOTP('password');
+	// 			const hashedPassword = await hash(randomPassword, 10);
 
-				await this.prisma.cameraOnline.create({
-					data: {
-						cameraId: camera.id,
-						endPointStreaming: `/live/${camera.id}/stream.m3u8`,
-						password: hashedPassword
-					}
-				});
+	// 			await this.prisma.cameraOnline.create({
+	// 				data: {
+	// 					cameraId: camera.id,
+	// 					endPointStreaming: `/live/${camera.id}/stream.m3u8`,
+	// 					password: hashedPassword
+	// 				}
+	// 			});
 
-				this.functions.generateResponseApi({
-					ok: true,
-					status: HttpStatus.OK,
-					message: Messages.SUCCESSFULLY_UPDATED,
-					data: [
-						updatedService,
-						{ password: randomPassword }
-					]
-				}, 'Objet');
-			}
+	// 			this.functions.generateResponseApi({
+	// 				ok: true,
+	// 				status: HttpStatus.OK,
+	// 				message: Messages.SUCCESSFULLY_UPDATED,
+	// 				data: [
+	// 					updatedService,
+	// 					{ password: randomPassword }
+	// 				]
+	// 			}, 'Objet');
+	// 		}
 
-			// Respuesta para el caso sin streaming
-			this.functions.generateResponseApi({
-				ok: true,
-				status: HttpStatus.OK,
-				message: Messages.SUCCESSFULLY_UPDATED,
-				data: [updatedService]
-			}, 'Objet');
+	// 		// Respuesta para el caso sin streaming
+	// 		this.functions.generateResponseApi({
+	// 			ok: true,
+	// 			status: HttpStatus.OK,
+	// 			message: Messages.SUCCESSFULLY_UPDATED,
+	// 			data: [updatedService]
+	// 		}, 'Objet');
 
-		} catch (error) {
-			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
-		}
-	}
+	// 	} catch (error) {
+	// 		if (error instanceof HttpException) throw error;
+	// 		else this.functions.generateResponseApi({});
+	// 	}
+	// }
 
 	// async remove(id: string) {
 	// 	try {

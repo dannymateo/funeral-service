@@ -73,17 +73,18 @@ export class CameraOnlineService {
 
       await this.functions.execCommand('systemctl daemon-reload');
 
-      this.functions.generateResponseApi({
+      return this.functions.generateResponseApi({
         ok: true,
         status: HttpStatus.CREATED,
         message: Messages.SUCCESSFULLY_CREATED
-      });
+      }, 'Objet');
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      this.functions.generateResponseApi({
+      else return this.functions.generateResponseApi({
+        ok: false,
         status: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: `Error creating camera service: ${error.message}`,
-      });
+        message: `Error creando el servicio de la cámara: ${error.message}`,
+      }, 'HttpException');
     }
   }
 
@@ -107,17 +108,18 @@ export class CameraOnlineService {
         await this.functions.execCommand('systemctl daemon-reload');
       }
 
-      this.functions.generateResponseApi({
+      return this.functions.generateResponseApi({
         ok: true,
         status: HttpStatus.OK,
         message: Messages.SUCCESSFULLY_UPDATED,
-      });
+      }, 'Objet');
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      this.functions.generateResponseApi({
+      else return this.functions.generateResponseApi({
+        ok: false,
         status: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: `Error modifying camera script ${id}: ${error.message}`,
-      });
+        message: `Error modificando el servicio de la cámara: ${error.message}`,
+      }, 'HttpException');
     }
   }
 
@@ -134,40 +136,47 @@ export class CameraOnlineService {
       await this.functions.execCommand(`systemctl stop camOnline-${id}.service`);
       await this.functions.execCommand('systemctl daemon-reload');
 
-      this.functions.generateResponseApi({
+      return this.functions.generateResponseApi({
         ok: true,
         status: HttpStatus.OK,
         message: Messages.SUCCESSFULLY_DELETED,
-      });
+      }, 'Objet');
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      this.functions.generateResponseApi({
+      else return this.functions.generateResponseApi({
+        ok: false,
         status: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: `Error deleting camera service ${id}: ${error.message}`,
-      });
+        message: `Error eliminado el servicio de la cámara: ${error.message}`,
+      }, 'HttpException');
     }
   }
 
   async upCameraOnlineService(id: string): Promise<void> {
     const cameraPathLive = path.join(BASE_PATH_LIVE, id);
+
     try {
       // Limpia el contenido del directorio
       await this.clearDirectoryContents(cameraPathLive);
 
+      // Intenta iniciar el servicio asociado a la cámara
       await this.functions.execCommand(`systemctl start camOnline-${id}.service`);
 
       // Genera una respuesta exitosa
       this.functions.generateResponseApi({
         ok: true,
         status: HttpStatus.OK,
-        message: Messages.SUCCESSFUL
-      });
+        message: Messages.SUCCESSFUL,
+      }, 'Objet');
     } catch (error) {
-      if (error instanceof HttpException) throw error;
-      this.functions.generateResponseApi({
-        status: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: `Error starting camera service ${id}: ${error.message}`,
-      });
+      if (error instanceof HttpException) {
+        throw error;
+      } else {
+        this.functions.generateResponseApi({
+          ok: false,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: `Error iniciando el servicio de la cámara: ${error.message}`,
+        }, 'HttpException');
+      }
     }
   }
 
@@ -184,13 +193,17 @@ export class CameraOnlineService {
         ok: true,
         status: HttpStatus.OK,
         message: Messages.SUCCESSFUL
-      });
+      }, 'Objet');
     } catch (error) {
-      if (error instanceof HttpException) throw error;
-      this.functions.generateResponseApi({
-        status: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: `Error stopping camera service ${id}: ${error.message}`,
-      });
+      if (error instanceof HttpException) {
+        throw error;
+      } else {
+        this.functions.generateResponseApi({
+          ok: false,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: `Error deteniendo el servicio de la cámara: ${error.message}`,
+        }, 'HttpException');
+      }
     }
   }
 

@@ -7,4 +7,4 @@ import { StreamingsService } from './streamings.service';
 	controllers: [StreamingsController],
 	providers: [StreamingsService],
 })
-export class StreamingsModule {}
+export class StreamingsModule { }

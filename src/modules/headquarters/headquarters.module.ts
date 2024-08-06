@@ -7,4 +7,4 @@ import { headquartersService } from './headquarters.service';
 	controllers: [HeadquartersController],
 	providers: [headquartersService],
 })
-export class HeadquartesModule {}
+export class HeadquartesModule { }

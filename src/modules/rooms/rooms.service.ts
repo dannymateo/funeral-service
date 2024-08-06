@@ -19,53 +19,65 @@ export class RoomsService {
 			const { name, active, headquarterId } = createRoomDto;
 
 			const existHeadquarter = await this.prisma.headquarter.findUnique({
-				where: { id: headquarterId, active: true },
+				where: { id: headquarterId },
 			});
 
 			if (!existHeadquarter || !existHeadquarter.active) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
-					message: `${Messages.ERROR_CREATING} "La sede que se está asociando no existe o está inactiva."`,
-				});
+					message: `${Messages.ERROR_CREATING} "La sede asociada no existe o está inactiva."`,
+				}, 'HttpException');
 			}
 
 			const duplicateRoom = await this.prisma.room.findFirst({
 				where: {
 					name,
-					headquarterId: headquarterId
+					headquarterId,
 				},
 				include: {
-					headquarter: true
+					headquarter: true,
 				},
 			});
 
 			if (duplicateRoom) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.CONFLICT,
-					message: `${Messages.ERROR_CREATING} "Ya existe una sala con este nombre para esta la sede de ${duplicateRoom.headquarter.name}."`,
-				});
+					message: `${Messages.ERROR_CREATING} "Ya existe una sala con este nombre en la sede ${duplicateRoom.headquarter.name}."`,
+				}, 'HttpException');
 			}
 
 			const roomData = await this.prisma.room.create({
 				data: {
 					name,
 					active,
-					headquarterId
+					headquarterId,
 				},
 				include: {
-					headquarter: true
+					headquarter: true,
 				},
 			});
 
-			this.functions.generateResponseApi({
+			return this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.CREATED,
 				message: Messages.SUCCESSFULLY_CREATED,
-				data: [{ id: roomData.id, name: roomData.name, active: roomData.active, headquarterName: roomData.headquarter.name }],
-			});
+				data: [{
+					id: roomData.id,
+					name: roomData.name,
+					active: roomData.active,
+					headquarterName: roomData.headquarter.name,
+				}],
+			}, 'Objet');
 		} catch (error) {
-			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			if (error instanceof HttpException) {
+				throw error;
+			} else {
+				return this.functions.generateResponseApi({
+					ok: false,
+					status: HttpStatus.INTERNAL_SERVER_ERROR,
+					message: `Error al crear la sala: ${error.message}`,
+				}, 'HttpException');
+			}
 		}
 	}
 
@@ -100,12 +112,11 @@ export class RoomsService {
 
 			const totalPages = Math.ceil(total / pageSize);
 
-			if (!rooms || !rooms.length || total === 0 || totalPages === 0) {
-				this.functions.generateResponseApi({
+			if (total === 0) {
+				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: Messages.NO_DATA_FOUND,
-				});
-				return;
+				}, 'HttpException');
 			}
 
 			const formattedRooms = rooms.map(room => ({
@@ -115,7 +126,7 @@ export class RoomsService {
 				headquarterName: room.headquarter?.name || null,
 			}));
 
-			this.functions.generateResponseApi({
+			return this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
 				data: formattedRooms,
@@ -126,13 +137,58 @@ export class RoomsService {
 					total,
 					search,
 				},
-			});
+			}, 'Objet');
 		} catch (error) {
-			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			if (error instanceof HttpException) {
+				throw error;
+			} else {
+				return this.functions.generateResponseApi({
+					ok: false,
+					status: HttpStatus.INTERNAL_SERVER_ERROR,
+					message: `Error al buscar salas: ${error.message}`,
+				}, 'HttpException');
+			}
 		}
 	}
 
+	async findByHeadquarterId(headquarterId: string) {
+		try {
+			const rooms = await this.prisma.room.findMany({
+				where: {
+					headquarterId,
+					active: true,
+				},
+				select: {
+					id: true,
+					name: true,
+				},
+				orderBy: {
+					name: 'asc',
+				},
+			});
+
+			const formattedRooms = rooms.map(room => ({
+				id: room.id,
+				name: room.name,
+			}));
+
+			return this.functions.generateResponseApi({
+				ok: true,
+				status: HttpStatus.OK,
+				data: formattedRooms,
+			}, 'Objet');
+		} catch (error) {
+			if (error instanceof HttpException) {
+				throw error;
+			} else {
+				return this.functions.generateResponseApi({
+					ok: false,
+					status: HttpStatus.INTERNAL_SERVER_ERROR,
+					message: `Error al buscar salas: ${error.message}`,
+				}, 'HttpException');
+			}
+		}
+	}
 
 	async findOne(id: string) {
 		try {
@@ -151,23 +207,34 @@ export class RoomsService {
 			});
 
 			if (!room) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: Messages.NO_DATA_FOUND,
-				});
+				}, 'HttpException');
 			}
 
-			this.functions.generateResponseApi({
+			return this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
-				data: [{name: room.name, active: room.active, headquarter: {
-					id: room.headquarter.id,
-					name: room.headquarter.name
-				}}],
-			});
+				data: [{
+					name: room.name,
+					active: room.active,
+					headquarter: {
+						id: room.headquarter.id,
+						name: room.headquarter.name,
+					},
+				}],
+			}, 'Objet');
 		} catch (error) {
-			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			if (error instanceof HttpException) {
+				throw error;
+			} else {
+				return this.functions.generateResponseApi({
+					ok: false,
+					status: HttpStatus.INTERNAL_SERVER_ERROR,
+					message: `Error al obtener la sala: ${error.message}`,
+				}, 'HttpException');
+			}
 		}
 	}
 
@@ -175,16 +242,15 @@ export class RoomsService {
 		try {
 			const { name, active, headquarterId } = updateRoomDto;
 
-			// Verificar si la habitación existe y está activa
 			const existHeadquarter = await this.prisma.headquarter.findUnique({
-				where: { id: headquarterId, active: true },
+				where: { id: headquarterId },
 			});
 
 			if (!existHeadquarter || !existHeadquarter.active) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: `${Messages.ERROR_CREATING} "La sede que se está asociando no existe o está inactiva."`,
-				});
+				}, 'HttpException');
 			}
 
 			const [duplicateRoom, actualRoom] = await this.prisma.$transaction([
@@ -197,28 +263,28 @@ export class RoomsService {
 						},
 					},
 					include: {
-						headquarter: true
+						headquarter: true,
 					},
 				}),
 				this.prisma.room.findUnique({
 					where: {
 						id,
-					}
+					},
 				}),
 			]);
 
 			if (duplicateRoom) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.CONFLICT,
-					message: `${Messages.ERROR_CREATING} "Ya existe una sala con este nombre para esta la sede de ${duplicateRoom.headquarter.name}."`,
-				});
+					message: `${Messages.ERROR_CREATING} "Ya existe una sala con este nombre para la sede de ${duplicateRoom.headquarter.name}."`,
+				}, 'HttpException');
 			}
 
 			if (!actualRoom) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: `${Messages.ERROR_UPDATING} "Sala no encontrada".`,
-				});
+				}, 'HttpException');
 			}
 
 			const roomData = await this.prisma.room.update({
@@ -228,77 +294,94 @@ export class RoomsService {
 				data: {
 					name,
 					active,
-					headquarterId
+					headquarterId,
 				},
 				include: {
-					headquarter: true
+					headquarter: true,
 				},
 			});
 
-			this.functions.generateResponseApi({
+			return this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
 				message: Messages.SUCCESSFULLY_UPDATED,
 				data: [{ id: roomData.id, name: roomData.name, active: roomData.active, headquarterName: roomData.headquarter.name }],
-			});
+			}, 'Objet');
 		} catch (error) {
-			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			if (error instanceof HttpException) {
+				throw error;
+			} else {
+				return this.functions.generateResponseApi({
+					ok: false,
+					status: HttpStatus.INTERNAL_SERVER_ERROR,
+					message: `Error al actualizar la sala: ${error.message}`,
+				}, 'HttpException');
+			}
 		}
 	}
 
 	async remove(id: string) {
 		try {
-			// Verificar si la sala existe
 			const actualRoom = await this.prisma.room.findUnique({
 				where: { id },
 			});
 
 			if (!actualRoom) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: Messages.NO_DATA_FOUND,
-				});
+				}, 'HttpException');
 			}
 
-			// Verificar si la sala tiene cámaras asociadas
 			const associatedCameras = await this.prisma.camera.findFirst({
 				where: { roomId: id },
 			});
 
 			if (associatedCameras) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.CONFLICT,
-					message: `${Messages.ERROR_CREATING} "Existen camaras asociadas a esta sala, primero remueva las cámaras para continuar".`,
-				});
+					message: `${Messages.ERROR_CREATING} "Existen cámaras asociadas a esta sala, primero remueva las cámaras para continuar."`,
+				}, 'HttpException');
 			}
 
-			// Verificar si la cámara tiene online asociadas y activos
-			const associatedService = await this.prisma.service.findFirst({
-				where: { roomId: id, current: true },
+			const associatedServices = await this.prisma.service.findMany({
+				where: { roomId: id },
 			});
 
-			if (associatedService) {
-				this.functions.generateResponseApi({
+			if (associatedServices.length > 0) {
+				return this.functions.generateResponseApi({
 					status: HttpStatus.CONFLICT,
-					message: `${Messages.ERROR_CREATING} "Existe un servicio activo asociado a esta sala, primero remuevalo para continuar".`,
-				});
+					message: `${Messages.ERROR_CREATING} "Existen ${associatedServices.length} servicios asociados a esta sala, primero remuévalos para continuar."`,
+				}, 'HttpException');
 			}
 
-			// Eliminar la sala
+			await this.prisma.camera.deleteMany({
+				where: { roomId: id },
+			});
+
+			await this.prisma.service.deleteMany({
+				where: { roomId: id },
+			});
+
 			await this.prisma.room.delete({
 				where: { id },
 			});
 
-			// Respuesta de éxito
-			this.functions.generateResponseApi({
+			return this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
 				message: Messages.SUCCESSFULLY_DELETED,
-			});
+			}, 'Objet');
 		} catch (error) {
-			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			if (error instanceof HttpException) {
+				throw error;
+			} else {
+				return this.functions.generateResponseApi({
+					ok: false,
+					status: HttpStatus.INTERNAL_SERVER_ERROR,
+					message: `Error al eliminar la sala: ${error.message}`,
+				}, 'HttpException');
+			}
 		}
 	}
 }

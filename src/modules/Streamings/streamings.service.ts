@@ -18,7 +18,6 @@ export class StreamingsService {
 
     async getPTZs(id: string) {
         try {
-
             const service = await this.prisma.service.findUnique({
                 where: { id, current: true },
                 include: {
@@ -35,10 +34,10 @@ export class StreamingsService {
             });
 
             if (!service) {
-                this.functions.generateResponseApi({
+                return this.functions.generateResponseApi({
                     status: HttpStatus.NOT_FOUND,
                     message: `${Messages.NO_DATA_FOUND} "Servicio no encontrado o no activo."`,
-                });
+                }, 'HttpException');
             }
 
             const PTZs = service.room.cameras.flatMap((camera) =>
@@ -48,14 +47,20 @@ export class StreamingsService {
                 .sort((a, b) => a.order - b.order)
                 .map(({ id, name }) => ({ id, name }));
 
-            this.functions.generateResponseApi({
+            return this.functions.generateResponseApi({
                 ok: true,
                 status: HttpStatus.OK,
                 data: [PTZs]
-            });
+            }, 'Objet');
         } catch (error) {
             if (error instanceof HttpException) throw error;
-            else this.functions.generateResponseApi({});
+            else {
+                return this.functions.generateResponseApi({
+                    ok: false,
+                    status: HttpStatus.INTERNAL_SERVER_ERROR,
+                    message: 'Se produjo un error al obtener los movimientos PTZ.',
+                }, 'HttpException');
+            }
         }
     }
 
@@ -71,76 +76,66 @@ export class StreamingsService {
                     },
                 },
             });
-    
+
             if (!actualPTZ) {
-                this.functions.generateResponseApi({
+                return this.functions.generateResponseApi({
                     ok: false,
                     status: HttpStatus.NOT_FOUND,
                     message: Messages.NO_DATA_FOUND,
-                });
+                }, 'HttpException');
             }
-    
-            try {
-                const { userName, password, ipAddress, httpPort } = actualPTZ.camera.authCamera;
-                const endpointUrl = `http://${ipAddress}:${httpPort}${actualPTZ.endPoint}`;
-                const auth = {
-                    username: userName,
-                    password: password,
-                    sendImmediately: false,
-                };
-    
-                const response = await axios.put(endpointUrl, {}, {
-                    auth,
-                    timeout: 3000,
-                    responseType: 'text',
-                });
-    
-                // Parsear la respuesta XML
-                const result = await parseStringPromise(response.data);
-    
-                // Extraer y verificar el statusCode y statusString
-                const statusCode = result.ResponseStatus.statusCode[0];
-                const statusString = result.ResponseStatus.statusString[0];
-    
-                if (statusCode === '1' && statusString === 'OK') {
-                     this.functions.generateResponseApi({
-                        ok: true,
-                        status: HttpStatus.OK,
-                        message: Messages.SUCCESSFUL,
-                    });
-                } else {
-                    // Respuesta con error de la API de Hikvision
-                     this.functions.generateResponseApi({
-                        ok: false,
-                        status: HttpStatus.BAD_REQUEST,
-                        message: `Error de la cámara: ${statusString}`,
-                    });
-                }
-            } catch (error) {
-                if (error.code === 'ETIMEDOUT') {
-                     this.functions.generateResponseApi({
-                        ok: false,
-                        status: HttpStatus.REQUEST_TIMEOUT,
-                        message: 'Se agotó el tiempo de espera de la solicitud al ejecutar el movimiento PTZ.',
-                    });
-                } else if (error.response && error.response.status === HttpStatus.UNAUTHORIZED) {
-                     this.functions.generateResponseApi({
-                        ok: false,
-                        status: HttpStatus.UNAUTHORIZED,
-                        message: 'Autenticación fallida al intentar ejecutar el movimiento PTZ.',
-                    });
-                } else {
-                    console.error('Error al ejecutar el movimiento PTZ:', error);
-                     this.functions.generateResponseApi({
-                        ok: false,
-                        status: HttpStatus.INTERNAL_SERVER_ERROR,
-                        message: 'Se produjo un error al ejecutar el movimiento PTZ.',
-                    });
-                }
+
+            const { userName, password, ipAddress, httpPort } = actualPTZ.camera.authCamera;
+            const endpointUrl = `http://${ipAddress}:${httpPort}${actualPTZ.endPoint}`;
+            const auth = {
+                username: userName,
+                password: password,
+                sendImmediately: false,
+            };
+
+            const response = await axios.put(endpointUrl, {}, {
+                auth,
+                timeout: 3000,
+                responseType: 'text',
+            });
+
+            const result = await parseStringPromise(response.data);
+            const statusCode = result.ResponseStatus.statusCode[0];
+            const statusString = result.ResponseStatus.statusString[0];
+
+            if (statusCode === '1' && statusString === 'OK') {
+                return this.functions.generateResponseApi({
+                    ok: true,
+                    status: HttpStatus.OK,
+                    message: Messages.SUCCESSFUL,
+                }, 'Objet');
+            } else {
+                return this.functions.generateResponseApi({
+                    ok: false,
+                    status: HttpStatus.BAD_REQUEST,
+                    message: `Error de la cámara: ${statusString}`,
+                }, 'HttpException');
             }
         } catch (error) {
-            if (error instanceof HttpException) throw error;
-            else this.functions.generateResponseApi({});
+            if (error.code === 'ETIMEDOUT') {
+                return this.functions.generateResponseApi({
+                    ok: false,
+                    status: HttpStatus.REQUEST_TIMEOUT,
+                    message: 'Se agotó el tiempo de espera de la solicitud al ejecutar el movimiento PTZ.',
+                }, 'HttpException');
+            } else if (error.response && error.response.status === HttpStatus.UNAUTHORIZED) {
+                return this.functions.generateResponseApi({
+                    ok: false,
+                    status: HttpStatus.UNAUTHORIZED,
+                    message: 'Autenticación fallida al intentar ejecutar el movimiento PTZ.',
+                }, 'HttpException');
+            } else {
+                return this.functions.generateResponseApi({
+                    ok: false,
+                    status: HttpStatus.INTERNAL_SERVER_ERROR,
+                    message: 'Se produjo un error al ejecutar el movimiento PTZ.',
+                }, 'HttpException');
+            }
         }
     }
 }

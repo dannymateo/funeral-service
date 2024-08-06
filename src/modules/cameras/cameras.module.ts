@@ -6,8 +6,8 @@ import { MailModule } from '../mail/mail.module';
 import { CamerasOnlineModule } from '../camerasOnline/camerasOnline.mulude';
 
 @Module({
-	imports: [ CamerasOnlineModule, MailModule],
+	imports: [CamerasOnlineModule, MailModule],
 	controllers: [CamerasController],
 	providers: [CamerasService],
 })
-export class CamerasModule {}
+export class CamerasModule { }

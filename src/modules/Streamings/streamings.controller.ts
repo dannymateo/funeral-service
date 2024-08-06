@@ -7,7 +7,7 @@ import { PaginationDto } from '../../common/dtos/pagination.dto';
 @ApiTags('streamings')
 @Controller('streamings')
 export class StreamingsController {
-	constructor(private readonly streamingsService: StreamingsService) { }
+    constructor(private readonly streamingsService: StreamingsService) { }
 
     @ApiOperation({ summary: 'Get PTZs for a specific service' })
     @ApiParam({
@@ -17,9 +17,9 @@ export class StreamingsController {
         example: 'uuid',
     })
     @Get('/getPTZs/:id')
-	getPTZs(@Param('id') id: string) {
-		return this.streamingsService.getPTZs(id);
-	}
+    getPTZs(@Param('id') id: string) {
+        return this.streamingsService.getPTZs(id);
+    }
 
     @ApiOperation({ summary: 'Execute PTZ movements for a specific service' })
     @ApiParam({
@@ -29,7 +29,7 @@ export class StreamingsController {
         example: 'uuid',
     })
     @Put('/execPTZ/:id')
-	execPTZ(@Param('id') id: string) {
-		return this.streamingsService.execPTZ(id);
-	}
+    execPTZ(@Param('id') id: string) {
+        return this.streamingsService.execPTZ(id);
+    }
 }

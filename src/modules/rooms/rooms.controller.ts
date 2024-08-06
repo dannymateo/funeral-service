@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Put, Param, Delete, Ip, Query } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 
 import { RoomsService } from './rooms.service';
 import { CreateRoomDto } from './dto/create-room.dto';
@@ -21,6 +21,12 @@ export class RoomsController {
 	@Get()
 	findAll(@Query() query: PaginationDto) {
 		return this.roomsService.findAll(query);
+	}
+
+	@Get('getActive')
+    @ApiOperation({ summary: 'It is to obtain the data for the selects' })
+	getActive(@Query('headquarterId') headquarterId: string) {
+		return this.roomsService.findByHeadquarterId(headquarterId);
 	}
 
 	@Get(':id')

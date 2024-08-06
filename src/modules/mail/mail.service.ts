@@ -10,7 +10,7 @@ export class MailService {
 	constructor(
 		private readonly config: ConfigService,
 		private readonly functions: FunctionsService,
-	) {}
+	) { }
 
 	private getTransporter() {
 		return createTransport({
@@ -162,9 +162,8 @@ export class MailService {
 						</td>
 					</tr>
 					<!-- BANNER -->
-					${
-						!!banner
-							? `
+					${!!banner
+				? `
 						<tr>
 							<td align="center" style="padding: 0 1rem;">
 								<table border="0" cellpadding="0" cellspacing="0" width="480" >
@@ -183,8 +182,8 @@ export class MailService {
 							</td>
 						</tr>
 					`
-							: ''
-					}
+				: ''
+			}
 					<!-- COPY -->
 					<tr>
 						<td align="center" style="padding: 0 1rem;">
@@ -209,9 +208,8 @@ export class MailService {
 									</td>
 								</tr>
 								<!-- ACTION BUTTON -->
-								${
-									!!action && !!action.title && !!action.url && !!action.description
-										? `
+								${!!action && !!action.title && !!action.url && !!action.description
+				? `
 									<tr>
 										<td bgcolor="#fefefe " align="center" style="padding: 2rem 1rem;">
 											<h4 style="margin: 0 0 .5rem; text-align: center;">
@@ -231,8 +229,8 @@ export class MailService {
 										</td>
 									</tr>
 								`
-										: ''
-								}
+				: ''
+			}
 							</table>
 						</td>
 					</tr>

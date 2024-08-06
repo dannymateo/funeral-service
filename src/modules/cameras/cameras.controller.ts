@@ -10,7 +10,7 @@ import { PaginationDto } from '../../common/dtos/pagination.dto';
 @ApiTags('cameras')
 @Controller('cameras')
 export class CamerasController {
-	constructor(private readonly camerasService: CamerasService) {}
+	constructor(private readonly camerasService: CamerasService) { }
 
 	@Post()
 	create(@Body() createCameraDto: CreateCameraDto) {

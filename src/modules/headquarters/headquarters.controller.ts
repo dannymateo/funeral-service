@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Body, Put, Param, Delete, Ip, Query } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, Put, Param, Delete, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 
 import { headquartersService } from './headquarters.service';
 import { CreateHeadquarterDto } from './dto/create-headquarter.dto';
@@ -9,7 +9,7 @@ import { PaginationDto } from '../../common/dtos/pagination.dto';
 @ApiTags('headquarters')
 @Controller('headquarters')
 export class HeadquartersController {
-	constructor(private readonly headquartersService: headquartersService) {}
+	constructor(private readonly headquartersService: headquartersService) { }
 
 	@Post()
 	create(
@@ -21,6 +21,12 @@ export class HeadquartersController {
 	@Get()
 	findAll(@Query() query: PaginationDto) {
 		return this.headquartersService.findAll(query);
+	}
+
+	@Get('/getActive')
+    @ApiOperation({ summary: 'It is to obtain the data for the selects' })
+	getActive() {
+		return this.headquartersService.findActive();
 	}
 
 	@Get(':id')

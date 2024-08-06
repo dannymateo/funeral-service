@@ -40,7 +40,7 @@ export class CamerasService {
 				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: "La sala asociada no existe o está inactiva.",
-				});
+				}, 'HttpException');
 			}
 
 			const existCameraInRoom = await this.prisma.camera.findFirst({
@@ -51,7 +51,7 @@ export class CamerasService {
 				return this.functions.generateResponseApi({
 					status: HttpStatus.CONFLICT,
 					message: `Ya existe una cámara asignada a la sala '${existRoom.name}' de la sede '${existRoom.headquarter.name}'. No se puede crear una nueva cámara en esta sala.`,
-				});
+				}, 'HttpException');
 			}
 
 			const existCamera = await this.prisma.camera.findFirst({
@@ -74,7 +74,7 @@ export class CamerasService {
 				return this.functions.generateResponseApi({
 					status: HttpStatus.CONFLICT,
 					message: `Ya existe una cámara con el nombre '${name}' en la sala '${existCamera.room.name}' de la sede '${existCamera.room.headquarter.name}'.`,
-				});
+				}, 'HttpException');
 			}
 
 			// Realizar la transacción para crear la cámara y la autenticación
@@ -122,7 +122,7 @@ export class CamerasService {
 					return this.functions.generateResponseApi({
 						status: HttpStatus.BAD_REQUEST,
 						message: `La cámara fue creada, pero no se pudieron agregar los movimientos PTZ debido a nombres duplicados: ${duplicateNames.join(', ')}.`,
-					});
+					}, 'HttpException');
 				}
 
 				// Validar órdenes duplicados
@@ -133,7 +133,7 @@ export class CamerasService {
 					return this.functions.generateResponseApi({
 						status: HttpStatus.BAD_REQUEST,
 						message: `La cámara fue creada, pero no se pudieron agregar los movimientos PTZ debido a órdenes duplicadas: ${duplicateOrders.join(', ')}.`,
-					});
+					}, 'HttpException');
 				}
 
 				await Promise.all(
@@ -150,25 +150,29 @@ export class CamerasService {
 				);
 			}
 
-			this.functions.generateResponseApi({
+			return this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.CREATED,
 				message: "Cámara creada con éxito.",
 				data: [{ id: result.id, name: result.name, hasPTZ: result.hasPTZ, active: result.active, roomName: result.room.name, headquarterName: result.room.headquarter.name }],
-			});
+			}, 'Objet');
 
 		} catch (error) {
-			// //Eliminar los archivos para el online de la camara
+			// Eliminar los archivos para el online de la camara
 			// await this.cameraOnline.removeCameraOnlineService(idCamera);
 
 			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			else return this.functions.generateResponseApi({
+				ok: false,
+				status: HttpStatus.INTERNAL_SERVER_ERROR,
+				message: 'Se produjo un error al crear la cámara.',
+			}, 'HttpException');
 		}
 	}
 
 	async findAll(query: PaginationDto) {
 		try {
-			const { search, page, pageSize } = query;
+			const { search, page = 1, pageSize = 10 } = query;
 
 			const searchCondition = search && search.trim() !== ''
 				? { name: { contains: search.toLowerCase() } }
@@ -192,7 +196,7 @@ export class CamerasService {
 					orderBy: {
 						name: 'asc',
 					},
-					skip: page > 0 ? (page - 1) * pageSize : 0,
+					skip: (page - 1) * pageSize,
 					take: pageSize,
 				}),
 				this.prisma.camera.count({
@@ -200,13 +204,13 @@ export class CamerasService {
 				}),
 			]);
 
-			const totalPages = Math.ceil(total / query.pageSize);
+			const totalPages = Math.ceil(total / pageSize);
 
-			if (!cameras || !cameras.length || total === 0 || totalPages === 0) {
-				this.functions.generateResponseApi({
+			if (cameras.length === 0) {
+				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: Messages.NO_DATA_FOUND,
-				});
+				}, 'HttpException');
 			}
 
 			const formattedCameras = cameras.map(camera => ({
@@ -218,7 +222,7 @@ export class CamerasService {
 				headquarterName: camera.room.headquarter?.name || null,
 			}));
 
-			this.functions.generateResponseApi({
+			return this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
 				data: formattedCameras,
@@ -229,10 +233,14 @@ export class CamerasService {
 					total,
 					search,
 				},
-			});
+			}, 'Objet');
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			else return this.functions.generateResponseApi({
+				ok: false,
+				status: HttpStatus.INTERNAL_SERVER_ERROR,
+				message: 'Se produjo un error al obtener las cámaras.',
+			}, 'HttpException');
 		}
 	}
 
@@ -258,11 +266,10 @@ export class CamerasService {
 			});
 
 			if (!camera) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: Messages.NO_DATA_FOUND,
-				});
-				return;
+				}, 'HttpException');
 			}
 
 			const listPTZ = camera.hasPTZ
@@ -298,17 +305,21 @@ export class CamerasService {
 					id: camera.room.headquarter.id,
 					name: camera.room.headquarter.name,
 				},
-				listPTZ: listPTZ,
+				listPTZ,
 			};
 
-			this.functions.generateResponseApi({
+			return this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
 				data: [responseData],
-			});
+			}, 'Objet');
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			else return this.functions.generateResponseApi({
+				ok: false,
+				status: HttpStatus.INTERNAL_SERVER_ERROR,
+				message: 'Se produjo un error al obtener los detalles de la cámara.',
+			}, 'HttpException');
 		}
 	}
 
@@ -320,10 +331,10 @@ export class CamerasService {
 			});
 
 			if (!camera) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: Messages.NO_DATA_FOUND,
-				});
+				}, 'HttpException');
 			}
 
 			let imagePreviewBase64 = null;
@@ -340,26 +351,30 @@ export class CamerasService {
 				imagePreviewBase64 = `data:image/png;base64,${Buffer.from(response.data, 'binary').toString('base64')}`;
 			} catch (error) {
 				if (error.code === 'ETIMEDOUT') {
-					this.functions.generateResponseApi({
+					return this.functions.generateResponseApi({
 						status: HttpStatus.REQUEST_TIMEOUT,
-						message: 'Se agotó el tiempo de espera de la solicitud al recuperar la vista previa de la imagen..',
-					});
+						message: 'Se agotó el tiempo de espera de la solicitud al recuperar la vista previa de la imagen.',
+					}, 'HttpException');
 				} else {
-					this.functions.generateResponseApi({
+					return this.functions.generateResponseApi({
 						status: HttpStatus.INTERNAL_SERVER_ERROR,
 						message: 'Se produjo un error al recuperar la vista previa de la imagen.',
-					});
+					}, 'HttpException');
 				}
 			}
 
-			this.functions.generateResponseApi({
+			return this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
-				data: [{ imagePreviewBase64: imagePreviewBase64 }],
-			});
+				data: [{ imagePreviewBase64 }],
+			}, 'Objet');
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			else return this.functions.generateResponseApi({
+				ok: false,
+				status: HttpStatus.INTERNAL_SERVER_ERROR,
+				message: 'Se produjo un error al intentar obtener la vista previa de la imagen.',
+			}, 'HttpException');
 		}
 	}
 
@@ -395,7 +410,7 @@ export class CamerasService {
 				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: "La sala asociada no existe o está inactiva.",
-				});
+				}, 'HttpException');
 			}
 
 			const result = await this.prisma.$transaction(async (prisma) => {
@@ -453,7 +468,7 @@ export class CamerasService {
 					return this.functions.generateResponseApi({
 						status: HttpStatus.BAD_REQUEST,
 						message: `La cámara fue actualizada, pero no se pudieron actualizar los movimientos PTZ debido a nombres duplicados: ${duplicateNames.join(', ')}.`,
-					});
+					}, 'HttpException');
 				}
 
 				// Validar órdenes duplicados
@@ -464,7 +479,7 @@ export class CamerasService {
 					return this.functions.generateResponseApi({
 						status: HttpStatus.BAD_REQUEST,
 						message: `La cámara fue actualizada, pero no se pudieron actualizar los movimientos PTZ debido a órdenes duplicadas: ${duplicateOrders.join(', ')}.`,
-					});
+					}, 'HttpException');
 				}
 
 				// Eliminar los movimientos PTZ anteriores
@@ -491,11 +506,15 @@ export class CamerasService {
 				status: HttpStatus.OK,
 				message: Messages.SUCCESSFULLY_UPDATED,
 				data: [{ id: result.id, name: result.name, hasPTZ: result.hasPTZ, active: result.active, roomName: result.room.name, headquarterName: result.room.headquarter.name }],
-			});
+			}, 'Objet');
 
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			else return this.functions.generateResponseApi({
+				ok: false,
+				status: HttpStatus.INTERNAL_SERVER_ERROR,
+				message: 'Se produjo un error al actualizar la cámara.',
+			}, 'HttpException');
 		}
 	}
 
@@ -509,10 +528,10 @@ export class CamerasService {
 					},
 				});
 				if (!actualCamera) {
-					this.functions.generateResponseApi({
+					return this.functions.generateResponseApi({
 						status: HttpStatus.NOT_FOUND,
 						message: Messages.NO_DATA_FOUND,
-					});
+					}, 'HttpException');
 				}
 
 				const associatedCameraOnline = await this.prisma.cameraOnline.findFirst({
@@ -520,10 +539,10 @@ export class CamerasService {
 				});
 
 				if (associatedCameraOnline) {
-					this.functions.generateResponseApi({
+					return this.functions.generateResponseApi({
 						status: HttpStatus.CONFLICT,
 						message: `${Messages.ERROR_CREATING} "Existe un servicio con streaming activo asociado a esta cámara, primero remuevalo para continuar".`,
-					});
+					}, 'HttpException');
 				}
 
 				// Eliminar los movimientos PTZ de la cámara
@@ -548,14 +567,18 @@ export class CamerasService {
 				}
 			});
 
-			this.functions.generateResponseApi({
+			return this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
 				message: Messages.SUCCESSFULLY_DELETED,
-			});
+			}, 'Objet');
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			else return this.functions.generateResponseApi({
+				ok: false,
+				status: HttpStatus.INTERNAL_SERVER_ERROR,
+				message: 'Se produjo un error al eliminar la cámara.',
+			}, 'HttpException');
 		}
 	}
 
@@ -566,10 +589,10 @@ export class CamerasService {
 			});
 
 			if (!camera) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: `${Messages.NO_DATA_FOUND} Cámara no encontrada.`,
-				});
+				}, 'HttpException');
 			}
 
 			const cameraOnline = await this.prisma.cameraOnline.findFirst({
@@ -580,10 +603,10 @@ export class CamerasService {
 			})
 
 			if (!cameraOnline) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: `${Messages.NO_DATA_FOUND} No hay un online activo para esta cámara.`,
-				});
+				}, 'HttpException');
 			}
 
 			await this.prisma.cameraOnline.update({
@@ -613,13 +636,17 @@ export class CamerasService {
 
 			await this.mail.sendMail(emailOptions);
 
-			this.functions.generateResponseApi({
+			return this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK
-			});
+			}, 'Objet');
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			else return this.functions.generateResponseApi({
+				ok: false,
+				status: HttpStatus.INTERNAL_SERVER_ERROR,
+				message: 'Se produjo un error al notificar el fallo en la cámara.',
+			}, 'HttpException');
 		}
 	}
 }

@@ -7,4 +7,4 @@ import { FunctionsService } from './functions.service';
 	providers: [FunctionsService],
 	exports: [FunctionsService],
 })
-export class FunctionsModule {}
+export class FunctionsModule { }

@@ -9,4 +9,4 @@ import { FunctionsModule } from '../functions/functions.module';
 	providers: [MailService],
 	exports: [MailService],
 })
-export class MailModule {}
+export class MailModule { }

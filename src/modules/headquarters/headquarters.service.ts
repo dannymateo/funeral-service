@@ -12,81 +12,87 @@ export class headquartersService {
 	constructor(
 		private readonly prisma: PrismaService,
 		private readonly functions: FunctionsService,
-	) {}
+	) { }
 
 	async create(createHeadquarterDto: CreateHeadquarterDto) {
 		try {
 			const { name, active } = createHeadquarterDto;
 
 			const duplicateHeadquarter = await this.prisma.headquarter.findUnique({
-				where: {
-					name,
-				},
+				where: { name },
 			});
 
 			if (duplicateHeadquarter) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.CONFLICT,
 					message: `${Messages.ERROR_CREATING} "Ya existe una sede con este nombre."`,
-				});
+				}, 'HttpException');
 			}
 
 			const headquarterData = await this.prisma.headquarter.create({
-				data: {
-					name,
-					active
-				},
+				data: { name, active },
 			});
 
-			this.functions.generateResponseApi({
+			return this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.CREATED,
 				message: Messages.SUCCESSFULLY_CREATED,
-				data: [{id: headquarterData.id, name: headquarterData.name, active: headquarterData.active}],
-			});
+				data: [{
+					id: headquarterData.id,
+					name: headquarterData.name,
+					active: headquarterData.active,
+				}],
+			}, 'Objet');
 		} catch (error) {
-			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			if (error instanceof HttpException) {
+				throw error;
+			} else {
+				return this.functions.generateResponseApi({
+					ok: false,
+					status: HttpStatus.INTERNAL_SERVER_ERROR,
+					message: `Error al crear la sede: ${error.message}`,
+				}, 'HttpException');
+			}
 		}
 	}
 
 	async findAll(query: PaginationDto) {
 		try {
-			const { search, page, pageSize } = query;
+			const { search, page = 1, pageSize = 10 } = query;
 
 			const searchCondition = search && search.trim() !== ''
-			? { name: { contains: search.toLowerCase() } }
-			: {};
-		  
-		  const [headquarters, total] = await this.prisma.$transaction([
-			this.prisma.headquarter.findMany({
-			  where: searchCondition,
-			  select: {
-				id: true,
-				name: true,
-				active: true,
-			  },
-			  orderBy: {
-				name: 'asc',
-			  },
-			  skip: page > 0 ? (page - 1) * pageSize : 0,
-			  take: pageSize,
-			}),
-			this.prisma.headquarter.count({
-			  where: searchCondition,
-			}),
-		  ]);
+				? { name: { contains: search.toLowerCase() } }
+				: {};
 
-			const totalPages = Math.ceil(total / query.pageSize);
+			const [headquarters, total] = await this.prisma.$transaction([
+				this.prisma.headquarter.findMany({
+					where: searchCondition,
+					select: {
+						id: true,
+						name: true,
+						active: true,
+					},
+					orderBy: {
+						name: 'asc',
+					},
+					skip: (page - 1) * pageSize,
+					take: pageSize,
+				}),
+				this.prisma.headquarter.count({
+					where: searchCondition,
+				}),
+			]);
 
-			if (!headquarters || !headquarters.length || total === 0 || totalPages === 0) {
-				this.functions.generateResponseApi({
+			const totalPages = Math.ceil(total / pageSize);
+
+			if (total === 0) {
+				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: Messages.NO_DATA_FOUND,
-				});
+				}, 'HttpException');
 			}
 
-			this.functions.generateResponseApi({
+			return this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
 				data: headquarters,
@@ -97,41 +103,86 @@ export class headquartersService {
 					total,
 					search,
 				},
-			});
+			}, 'Objet');
 		} catch (error) {
-			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			if (error instanceof HttpException) {
+				throw error;
+			} else {
+				return this.functions.generateResponseApi({
+					ok: false,
+					status: HttpStatus.INTERNAL_SERVER_ERROR,
+					message: `Error al obtener las sedes: ${error.message}`,
+				}, 'HttpException');
+			}
+		}
+	}
+
+	async findActive() {
+		try {
+			const headquarters = await this.prisma.headquarter.findMany({
+				where: {
+					active: true,
+				},
+				select: {
+					id: true,
+					name: true,
+				},
+				orderBy: {
+					name: 'asc',
+				},
+			});
+
+			return this.functions.generateResponseApi({
+				ok: true,
+				status: HttpStatus.OK,
+				data: headquarters,
+			}, 'Objet');
+		} catch (error) {
+			if (error instanceof HttpException) {
+				throw error;
+			} else {
+				return this.functions.generateResponseApi({
+					ok: false,
+					status: HttpStatus.INTERNAL_SERVER_ERROR,
+					message: `Error al obtener las sedes: ${error.message}`,
+				}, 'HttpException');
+			}
 		}
 	}
 
 	async findOne(id: string) {
 		try {
 			const headquarter = await this.prisma.headquarter.findUnique({
-				where: {
-					id,
-				},
+				where: { id },
 				select: {
 					id: true,
 					name: true,
-					active: true
+					active: true,
 				},
 			});
 
 			if (!headquarter) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: Messages.NO_DATA_FOUND,
-				});
+				}, 'HttpException');
 			}
 
-			this.functions.generateResponseApi({
+			return this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
 				data: [headquarter],
-			});
+			}, 'Objet');
 		} catch (error) {
-			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			if (error instanceof HttpException) {
+				throw error;
+			} else {
+				return this.functions.generateResponseApi({
+					ok: false,
+					status: HttpStatus.INTERNAL_SERVER_ERROR,
+					message: `Error al obtener la sede: ${error.message}`,
+				}, 'HttpException');
+			}
 		}
 	}
 
@@ -141,92 +192,106 @@ export class headquartersService {
 
 			const [duplicateHeadquarter, actualHeadquarter] = await this.prisma.$transaction([
 				this.prisma.headquarter.findFirst({
-				  where: {
-					name,
-					id: {
-					  not: id,
+					where: {
+						name,
+						id: {
+							not: id,
+						},
 					},
-				  },
 				}),
 				this.prisma.headquarter.findUnique({
-				  where: {
-					id,
-				  },
+					where: {
+						id,
+					},
 				}),
-			  ]);
+			]);
 
 			if (duplicateHeadquarter) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.CONFLICT,
 					message: `${Messages.ERROR_CREATING} "Ya existe una sede con este nombre."`,
-				});
+				}, 'HttpException');
 			}
 
 			if (!actualHeadquarter) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
-					message: `${Messages.ERROR_UPDATING} "Sede no encontrada".`,
-				});
+					message: `${Messages.ERROR_UPDATING} "Sede no encontrada."`,
+				}, 'HttpException');
 			}
 
 			const headquarterData = await this.prisma.headquarter.update({
 				where: {
-				  id,
+					id,
 				},
 				data: {
-				  name,
-				  active,
+					name,
+					active,
 				},
-			  });			  
+			});
 
-			this.functions.generateResponseApi({
+			return this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
 				message: Messages.SUCCESSFULLY_UPDATED,
-				data: [{id: headquarterData.id, name: headquarterData.name, active: headquarterData.active}],
-			});
+				data: [{ id: headquarterData.id, name: headquarterData.name, active: headquarterData.active }],
+			}, 'Objet');
 		} catch (error) {
-			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			if (error instanceof HttpException) {
+				throw error;
+			} else {
+				return this.functions.generateResponseApi({
+					ok: false,
+					status: HttpStatus.INTERNAL_SERVER_ERROR,
+					message: `Error al actualizar la sede: ${error.message}`,
+				}, 'HttpException');
+			}
 		}
 	}
 
 	async remove(id: string) {
 		try {
 			const actualHeadquarter = await this.prisma.headquarter.findUnique({
-			where: { id },
+				where: { id },
 			});
 
 			if (!actualHeadquarter) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: Messages.NO_DATA_FOUND,
-				});
+				}, 'HttpException');
 			}
 
 			const associatedRooms = await this.prisma.room.findFirst({
-			where: { headquarterId: id },
+				where: { headquarterId: id },
 			});
 
 			if (associatedRooms) {
-				this.functions.generateResponseApi({
+				return this.functions.generateResponseApi({
 					status: HttpStatus.CONFLICT,
-					message: `${Messages.ERROR_CREATING} "Existen salas asociadas a esta cámara, primero remueva las cámaras para continuar".`,
-				});
+					message: `${Messages.ERROR_CREATING} "Existen salas asociadas a esta sede, primero remueva las salas para continuar".`,
+				}, 'HttpException');
 			}
 
 			await this.prisma.headquarter.delete({
-			where: { id },
+				where: { id },
 			});
 
-			this.functions.generateResponseApi({
+			return this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
 				message: Messages.SUCCESSFULLY_DELETED,
-			});
+			}, 'Objet');
 		} catch (error) {
-			if (error instanceof HttpException) throw error;
-			else this.functions.generateResponseApi({});
+			if (error instanceof HttpException) {
+				throw error;
+			} else {
+				return this.functions.generateResponseApi({
+					ok: false,
+					status: HttpStatus.INTERNAL_SERVER_ERROR,
+					message: `Error al eliminar la sede: ${error.message}`,
+				}, 'HttpException');
+			}
 		}
 	}
 }

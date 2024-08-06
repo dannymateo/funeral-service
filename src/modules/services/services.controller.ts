@@ -9,7 +9,7 @@ import { PaginationDto } from '../../common/dtos/pagination.dto';
 @ApiTags('services')
 @Controller('services')
 export class ServicesController {
-	constructor(private readonly servicesService: ServicesService) {}
+	constructor(private readonly servicesService: ServicesService) { }
 
 	@Post()
 	create(
@@ -28,13 +28,13 @@ export class ServicesController {
 	// 	return this.servicesService.findOne(id);
 	// }
 
-	@Put(':id')
-	update(
-		@Param('id') id: string,
-		@Body() updateServiceDto: UpdateServiceDto,
-	) {
-		return this.servicesService.update(id, updateServiceDto);
-	}
+	// @Put(':id')
+	// update(
+	// 	@Param('id') id: string,
+	// 	@Body() updateServiceDto: UpdateServiceDto,
+	// ) {
+	// 	return this.servicesService.update(id, updateServiceDto);
+	// }
 
 	// @Delete(':id')
 	// remove(@Param('id') id: string) {
