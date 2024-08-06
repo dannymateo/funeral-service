@@ -56,7 +56,7 @@ model Camera {
   room              Room            @relation(fields: [roomId], references: [id]) 
   authCameraId      String
   authCamera        AuthCamera      @relation(fields: [authCameraId], references: [id])
-  name              String          @unique
+  name              String         
   hasPTZ            Boolean         @default(false)
   active            Boolean         @default(false)
   createdAt         DateTime        @default(now())

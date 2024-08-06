@@ -74,37 +74,40 @@ export class FunctionsService {
 		}
 	};
 
-	async execCommand(command: string): Promise<void> {
+	async execCommand(command: string): Promise<string> {
 		return new Promise((resolve, reject) => {
-		  const child = spawn(command, { shell: true });
-	
-		  child.stdout.on('data', (data) => {
-			console.log(`stdout: ${data}`);
-		  });
-	
-		  child.stderr.on('data', (data) => {
-			console.error(`stderr: ${data}`);
-		  });
-	
-		  child.on('close', (code) => {
-			if (code !== 0) {
-			  reject(new Error(`Command failed with exit code ${code}`));
-			} else {
-			  resolve();
-			}
-		  });
+			const child = spawn(command, { shell: true });
+
+			let output = '';
+			let errorOutput = '';
+
+			child.stdout.on('data', (data) => {
+				output += data.toString(); // Acumula el output del comando
+			});
+
+			child.stderr.on('data', (data) => {
+				errorOutput += data.toString(); // Acumula el error del comando
+			});
+
+			child.on('close', (code) => {
+				if (code !== 0) {
+					reject(new Error(`Command failed with exit code ${code}. Error: ${errorOutput}`));
+				} else {
+					resolve(output.trim()); // Devuelve el output del comando
+				}
+			});
 		});
 	}
 
 	async ensureDirectoryExists(directoryPath: string): Promise<void> {
 		try {
-		  await fs.access(directoryPath);
+			await fs.access(directoryPath);
 		} catch (error: any) {
-		  if (error.code === 'ENOENT') {
-			await fs.mkdir(directoryPath, { recursive: true });
-		  } else {
-			throw error;
-		  }
+			if (error.code === 'ENOENT') {
+				await fs.mkdir(directoryPath, { recursive: true });
+			} else {
+				throw error;
+			}
 		}
 	}
 }

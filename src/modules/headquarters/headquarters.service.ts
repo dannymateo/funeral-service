@@ -42,7 +42,7 @@ export class headquartersService {
 				ok: true,
 				status: HttpStatus.CREATED,
 				message: Messages.SUCCESSFULLY_CREATED,
-				data: [headquarterData],
+				data: [{id: headquarterData.id, name: headquarterData.name, active: headquarterData.active}],
 			});
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
@@ -56,11 +56,11 @@ export class headquartersService {
 
 			const searchCondition = search && search.trim() !== ''
 			? { name: { contains: search.toLowerCase() } }
-			: {}; // No aplicar filtro si `search` es vacío o nulo
+			: {};
 		  
 		  const [headquarters, total] = await this.prisma.$transaction([
 			this.prisma.headquarter.findMany({
-			  where: searchCondition, // Aplica el filtro si existe `searchCondition`
+			  where: searchCondition,
 			  select: {
 				id: true,
 				name: true,
@@ -73,7 +73,7 @@ export class headquartersService {
 			  take: pageSize,
 			}),
 			this.prisma.headquarter.count({
-			  where: searchCondition, // Aplica el filtro si existe `searchCondition`
+			  where: searchCondition,
 			}),
 		  ]);
 
@@ -183,7 +183,7 @@ export class headquartersService {
 				ok: true,
 				status: HttpStatus.OK,
 				message: Messages.SUCCESSFULLY_UPDATED,
-				data: [headquarterData],
+				data: [{id: headquarterData.id, name: headquarterData.name, active: headquarterData.active}],
 			});
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
@@ -193,7 +193,6 @@ export class headquartersService {
 
 	async remove(id: string) {
 		try {
-			// Verificar si la sala existe
 			const actualHeadquarter = await this.prisma.headquarter.findUnique({
 			where: { id },
 			});
@@ -205,7 +204,6 @@ export class headquartersService {
 				});
 			}
 
-			// Verificar si la sala tiene cámaras asociadas
 			const associatedRooms = await this.prisma.room.findFirst({
 			where: { headquarterId: id },
 			});
@@ -217,12 +215,10 @@ export class headquartersService {
 				});
 			}
 
-			// Eliminar la sala
 			await this.prisma.headquarter.delete({
 			where: { id },
 			});
 
-			// Respuesta de éxito
 			this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,

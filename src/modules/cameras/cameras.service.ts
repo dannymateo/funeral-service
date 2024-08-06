@@ -6,7 +6,7 @@ import { CreateCameraDto } from './dtos/create-camera.dto';
 import { UpdateCameraDto } from './dtos/update-camera.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { FunctionsService } from '../functions/functions.service';
-import { CameraUtilsService } from './utils/camerasUtils.service';
+import { CameraOnlineService } from '../camerasOnline/camerasOnline.service';
 import { MailService } from '../mail/mail.service';
 import { Messages } from 'src/common/enums';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
@@ -16,7 +16,7 @@ export class CamerasService {
 	constructor(
 		private readonly prisma: PrismaService,
 		private readonly functions: FunctionsService,
-		private readonly camerasUtils: CameraUtilsService,
+		private readonly cameraOnline: CameraOnlineService,
 		private readonly mail: MailService,
 	) { }
 
@@ -25,45 +25,60 @@ export class CamerasService {
 		const { name, active, hasPTZ, roomId, authCamera, movementsPTZ } = createCameraDto;
 
 		try {
+			const existRoom = await this.prisma.room.findUnique({
+				where: { id: roomId, active: true },
+				include: {
+					headquarter: {
+						select: {
+							name: true,
+						},
+					},
+				},
+			});
+
+			if (!existRoom) {
+				return this.functions.generateResponseApi({
+					status: HttpStatus.NOT_FOUND,
+					message: "La sala asociada no existe o está inactiva.",
+				});
+			}
+
+			const existCameraInRoom = await this.prisma.camera.findFirst({
+				where: { roomId }
+			});
+
+			if (existCameraInRoom) {
+				return this.functions.generateResponseApi({
+					status: HttpStatus.CONFLICT,
+					message: `Ya existe una cámara asignada a la sala '${existRoom.name}' de la sede '${existRoom.headquarter.name}'. No se puede crear una nueva cámara en esta sala.`,
+				});
+			}
+
+			const existCamera = await this.prisma.camera.findFirst({
+				where: { name, roomId },
+				include: {
+					room: {
+						select: {
+							name: true,
+							headquarter: {
+								select: {
+									name: true,
+								},
+							},
+						},
+					},
+				},
+			});
+
+			if (existCamera) {
+				return this.functions.generateResponseApi({
+					status: HttpStatus.CONFLICT,
+					message: `Ya existe una cámara con el nombre '${name}' en la sala '${existCamera.room.name}' de la sede '${existCamera.room.headquarter.name}'.`,
+				});
+			}
+
+			// Realizar la transacción para crear la cámara y la autenticación
 			const result = await this.prisma.$transaction(async (prisma) => {
-
-				// Verificar si la habitación existe y está activa
-				const existRoom = await prisma.room.findUnique({
-					where: { id: roomId, active: true },
-				});
-
-				if (!existRoom || !existRoom.active) {
-					this.functions.generateResponseApi({
-						status: HttpStatus.NOT_FOUND,
-						message: `${Messages.ERROR_CREATING} "La sala que se está asociando no existe o está inactiva."`,
-					});
-				}
-
-				// Verificar si ya existe una cámara en esta sala
-				const existCamera = await prisma.camera.findFirst({
-					where: { name, roomId },
-				});
-
-				if (existCamera) {
-					this.functions.generateResponseApi({
-						status: HttpStatus.CONFLICT,
-						message: `${Messages.ERROR_UPDATING} "Ya existe una cámara con este nombre para esta sala."`,
-					});
-				}
-
-				// Verificar si ya existe una cámara con el mismo nombre
-				const duplicateCamera = await prisma.camera.findFirst({
-					where: { name },
-				});
-
-				if (duplicateCamera) {
-					this.functions.generateResponseApi({
-						status: HttpStatus.CONFLICT,
-						message: `${Messages.ERROR_CREATING} "Ya existe una cámara con este nombre."`,
-					});
-				}
-
-				// Crear la autenticación de la cámara
 				const authCameraCreate = await prisma.authCamera.create({
 					data: {
 						...authCamera,
@@ -72,7 +87,6 @@ export class CamerasService {
 					},
 				});
 
-				// Crear la cámara con la relación de autenticación
 				const cameraData = await prisma.camera.create({
 					data: {
 						id: idCamera,
@@ -82,42 +96,46 @@ export class CamerasService {
 						roomId,
 						authCameraId: authCameraCreate.id,
 					},
+					include: {
+						room: {
+							select: {
+								name: true,
+								headquarter: {
+									select: {
+										name: true,
+									},
+								},
+							},
+						},
+					},
 				});
-
-				// Crear servicios de streaming para la cámara
-				// await this.camerasUtils.createCameraOnlineService(
-				//   cameraData.id,
-				//   `rtsp://${authCameraCreate.userName}:${authCameraCreate.password}@${authCameraCreate.ipAddress}:${authCameraCreate.rtspPort}${authCameraCreate.endPointRtsp}`
-				// );
 
 				return cameraData;
 			});
 
-			// Validar los movimientos PTZ
 			if (hasPTZ && movementsPTZ?.length > 0) {
 				// Validar nombres duplicados
-				const names = movementsPTZ.map(movement => movement.name);
+				const names = movementsPTZ.map((movement) => movement.name);
 				const duplicateNames = names.filter((name, index) => names.indexOf(name) !== index);
 
 				if (duplicateNames.length > 0) {
 					return this.functions.generateResponseApi({
 						status: HttpStatus.BAD_REQUEST,
-						message: `${Messages.ERROR_UPDATING} "Hay nombres de movimientos PTZ duplicados: ${duplicateNames.join(', ')}."`,
+						message: `La cámara fue creada, pero no se pudieron agregar los movimientos PTZ debido a nombres duplicados: ${duplicateNames.join(', ')}.`,
 					});
 				}
 
 				// Validar órdenes duplicados
-				const orders = movementsPTZ.map(movement => movement.order);
+				const orders = movementsPTZ.map((movement) => movement.order);
 				const duplicateOrders = orders.filter((order, index) => orders.indexOf(order) !== index);
 
 				if (duplicateOrders.length > 0) {
 					return this.functions.generateResponseApi({
 						status: HttpStatus.BAD_REQUEST,
-						message: `${Messages.ERROR_UPDATING} "Hay órdenes de movimientos PTZ duplicadas: ${duplicateOrders.join(', ')}."`,
+						message: `La cámara fue creada, pero no se pudieron agregar los movimientos PTZ debido a órdenes duplicadas: ${duplicateOrders.join(', ')}.`,
 					});
 				}
 
-				// Insertar los movimientos PTZ nuevos
 				await Promise.all(
 					movementsPTZ.map((movement) =>
 						this.prisma.movementsPTZ.create({
@@ -135,14 +153,13 @@ export class CamerasService {
 			this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.CREATED,
-				message: Messages.SUCCESSFULLY_CREATED,
-				data: [result],
+				message: "Cámara creada con éxito.",
+				data: [{ id: result.id, name: result.name, hasPTZ: result.hasPTZ, active: result.active, roomName: result.room.name, headquarterName: result.room.headquarter.name }],
 			});
 
 		} catch (error) {
-
-			//Eliminar los archivos para el online de la camara
-			//   await this.camerasUtils.removeCameraOnlineService(idCamera);
+			// //Eliminar los archivos para el online de la camara
+			// await this.cameraOnline.removeCameraOnlineService(idCamera);
 
 			if (error instanceof HttpException) throw error;
 			else this.functions.generateResponseApi({});
@@ -155,7 +172,7 @@ export class CamerasService {
 
 			const searchCondition = search && search.trim() !== ''
 				? { name: { contains: search.toLowerCase() } }
-				: {}; // No aplicar filtro si `search` es vacío o nulo
+				: {};
 
 			const [cameras, total] = await this.prisma.$transaction([
 				this.prisma.camera.findMany({
@@ -164,6 +181,11 @@ export class CamerasService {
 						room: {
 							select: {
 								name: true,
+								headquarter: {
+									select: {
+										name: true,
+									},
+								},
 							},
 						},
 					},
@@ -187,10 +209,19 @@ export class CamerasService {
 				});
 			}
 
+			const formattedCameras = cameras.map(camera => ({
+				id: camera.id,
+				name: camera.name,
+				hasPTZ: camera.hasPTZ,
+				active: camera.active,
+				roomName: camera.room?.name || null,
+				headquarterName: camera.room.headquarter?.name || null,
+			}));
+
 			this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
-				data: cameras,
+				data: formattedCameras,
 				meta: {
 					page,
 					pageSize,
@@ -208,31 +239,66 @@ export class CamerasService {
 	async findOne(id: string) {
 		try {
 			const camera = await this.prisma.camera.findUnique({
-				where: {
-					id,
+				where: { id },
+				include: {
+					authCamera: true,
+					room: {
+						select: {
+							id: true,
+							name: true,
+							headquarter: {
+								select: {
+									id: true,
+									name: true,
+								},
+							},
+						},
+					},
 				},
-				include: { authCamera: true }
 			});
-
 
 			if (!camera) {
 				this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: Messages.NO_DATA_FOUND,
 				});
+				return;
 			}
 
-			// Obtener movimientos PTZ si la cámara tiene esta funcionalidad
 			const listPTZ = camera.hasPTZ
 				? await this.prisma.movementsPTZ.findMany({
+					select: {
+						order: true,
+						name: true,
+						endPoint: true,
+					},
 					where: { cameraId: camera.id },
 				})
 				: [];
 
-			// Construir la respuesta con la información obtenida
 			const responseData = {
-				...camera,
-				listPTZ,
+				id: camera.id,
+				name: camera.name,
+				hasPTZ: camera.hasPTZ,
+				active: camera.active,
+				authCamera: {
+					userName: camera.authCamera.userName,
+					password: camera.authCamera.password,
+					ipAddress: camera.authCamera.ipAddress,
+					rtspPort: camera.authCamera.rtspPort,
+					endPointRtsp: camera.authCamera.endPointRtsp,
+					httpPort: camera.authCamera.httpPort,
+					endPointImagePreview: camera.authCamera.endPointImagePreview,
+				},
+				room: {
+					id: camera.room.id,
+					name: camera.room.name,
+				},
+				headquarter: {
+					id: camera.room.headquarter.id,
+					name: camera.room.headquarter.name,
+				},
+				listPTZ: listPTZ,
 			};
 
 			this.functions.generateResponseApi({
@@ -248,13 +314,11 @@ export class CamerasService {
 
 	async getImagePreview(id: string) {
 		try {
-			// Buscar la cámara junto con la información de autenticación
 			const camera = await this.prisma.camera.findUnique({
 				where: { id },
 				include: { authCamera: true },
 			});
 
-			// Verificar si la cámara existe
 			if (!camera) {
 				this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
@@ -262,23 +326,19 @@ export class CamerasService {
 				});
 			}
 
-			// Inicializar la variable para la imagen en base64
 			let imagePreviewBase64 = null;
 
 			try {
-				// Hacer la solicitud al endpoint para obtener la imagen en base64
 				const response = await axios.get(
 					`http://${camera.authCamera.userName}:${camera.authCamera.password}@${camera.authCamera.ipAddress}:${camera.authCamera.httpPort}${camera.authCamera.endPointImagePreview}`,
 					{
 						responseType: 'arraybuffer',
-						timeout: 3000, // Tiempo de espera de 3 segundos
+						timeout: 3000,
 					}
 				);
 
-				// Convertir la respuesta en Base64
 				imagePreviewBase64 = `data:image/png;base64,${Buffer.from(response.data, 'binary').toString('base64')}`;
 			} catch (error) {
-				// Manejo de errores específicos, como tiempos de espera
 				if (error.code === 'ETIMEDOUT') {
 					this.functions.generateResponseApi({
 						status: HttpStatus.REQUEST_TIMEOUT,
@@ -292,11 +352,10 @@ export class CamerasService {
 				}
 			}
 
-			// Respuesta exitosa, aunque la imagen pueda ser null
 			this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
-				data: [imagePreviewBase64],
+				data: [{ imagePreviewBase64: imagePreviewBase64 }],
 			});
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
@@ -308,58 +367,38 @@ export class CamerasService {
 		const { name, active, hasPTZ, roomId, authCamera, movementsPTZ } = updateCameraDto;
 
 		try {
-			// Inicia una transacción para las operaciones que no sean los movimientos PTZ
+			// Verificar si la cámara existe
+			const existingCamera = await this.prisma.camera.findUnique({
+				where: { id },
+				include: { authCamera: true }
+			});
+
+			if (!existingCamera) {
+				this.functions.generateResponseApi({
+					status: HttpStatus.NOT_FOUND,
+					message: `${Messages.ERROR_UPDATING} "La cámara no existe."`,
+				});
+			}
+
+			const existRoom = await this.prisma.room.findUnique({
+				where: { id: roomId, active: true },
+				include: {
+					headquarter: {
+						select: {
+							name: true,
+						},
+					},
+				},
+			});
+
+			if (!existRoom) {
+				return this.functions.generateResponseApi({
+					status: HttpStatus.NOT_FOUND,
+					message: "La sala asociada no existe o está inactiva.",
+				});
+			}
+
 			const result = await this.prisma.$transaction(async (prisma) => {
-				// Verificar si la cámara existe
-				const existingCamera = await prisma.camera.findUnique({
-					where: { id },
-					include: { authCamera: true }
-				});
-
-				if (!existingCamera) {
-					this.functions.generateResponseApi({
-						status: HttpStatus.NOT_FOUND,
-						message: `${Messages.ERROR_UPDATING} "La cámara no existe."`,
-					});
-				}
-
-				// Verificar si la habitación existe y está activa
-				const existRoom = await prisma.room.findUnique({
-					where: { id: roomId, active: true },
-				});
-
-				if (!existRoom || !existRoom.active) {
-					this.functions.generateResponseApi({
-						status: HttpStatus.NOT_FOUND,
-						message: `${Messages.ERROR_CREATING} "La sala que se está asociando no existe o está inactiva."`,
-					});
-				}
-
-				// Verificar si ya existe una cámara en esta sala
-				const existCamera = await prisma.camera.findFirst({
-					where: { roomId },
-				});
-
-				if (existCamera) {
-					this.functions.generateResponseApi({
-						status: HttpStatus.CONFLICT,
-						message: `${Messages.ERROR_CREATING} "Ya existe una cámara en esa sala."`,
-					});
-				}
-
-				// Verificar si el nuevo nombre está en uso
-				if (name && name !== existingCamera.name) {
-					const existingNameCamera = await prisma.camera.findUnique({
-						where: { name, roomId },
-					});
-
-					if (existingNameCamera) {
-						this.functions.generateResponseApi({
-							status: HttpStatus.CONFLICT,
-							message: `${Messages.ERROR_UPDATING} "Ya existe una cámara con este nombre para esta sala."`,
-						});
-					}
-				}
 
 				// Actualizar la autenticación de la cámara si se proporciona nueva información
 				if (authCamera) {
@@ -382,38 +421,49 @@ export class CamerasService {
 						hasPTZ: hasPTZ ?? existingCamera.hasPTZ,
 						roomId: roomId ?? existingCamera.roomId,
 					},
+					include: {
+						room: {
+							select: {
+								name: true,
+								headquarter: {
+									select: {
+										name: true,
+									},
+								},
+							},
+						},
+					},
 				});
 
 				// Actualizar servicios de streaming para la cámara
-				// await this.camerasUtils.updateCameraOnlineScript(
-				//   id,
-				//   `rtsp://${existingCamera.authCamera.userName}:${existingCamera.authCamera.password}@${existingCamera.authCamera.ipAddress}:${existingCamera.authCamera.rtspPort}${existingCamera.authCamera.endPointRtsp}`
+				// await this.cameraOnline.updateCameraOnlineScript(
+				// 	id,
+				// 	`rtsp://${existingCamera.authCamera.userName}:${existingCamera.authCamera.password}@${existingCamera.authCamera.ipAddress}:${existingCamera.authCamera.rtspPort}${existingCamera.authCamera.endPointRtsp}`
 				// );
 
 				return updatedCamera;
 			});
 
-			// Validar los movimientos PTZ
 			if (hasPTZ && movementsPTZ?.length > 0) {
 				// Validar nombres duplicados
-				const names = movementsPTZ.map(movement => movement.name);
+				const names = movementsPTZ.map((movement) => movement.name);
 				const duplicateNames = names.filter((name, index) => names.indexOf(name) !== index);
 
 				if (duplicateNames.length > 0) {
 					return this.functions.generateResponseApi({
 						status: HttpStatus.BAD_REQUEST,
-						message: `${Messages.ERROR_UPDATING} "Hay nombres de movimientos PTZ duplicados: ${duplicateNames.join(', ')}."`,
+						message: `La cámara fue actualizada, pero no se pudieron actualizar los movimientos PTZ debido a nombres duplicados: ${duplicateNames.join(', ')}.`,
 					});
 				}
 
 				// Validar órdenes duplicados
-				const orders = movementsPTZ.map(movement => movement.order);
+				const orders = movementsPTZ.map((movement) => movement.order);
 				const duplicateOrders = orders.filter((order, index) => orders.indexOf(order) !== index);
 
 				if (duplicateOrders.length > 0) {
 					return this.functions.generateResponseApi({
 						status: HttpStatus.BAD_REQUEST,
-						message: `${Messages.ERROR_UPDATING} "Hay órdenes de movimientos PTZ duplicadas: ${duplicateOrders.join(', ')}."`,
+						message: `La cámara fue actualizada, pero no se pudieron actualizar los movimientos PTZ debido a órdenes duplicadas: ${duplicateOrders.join(', ')}.`,
 					});
 				}
 
@@ -422,7 +472,6 @@ export class CamerasService {
 					where: { cameraId: id },
 				});
 
-				// Insertar los movimientos PTZ nuevos
 				await Promise.all(
 					movementsPTZ.map((movement) =>
 						this.prisma.movementsPTZ.create({
@@ -441,11 +490,10 @@ export class CamerasService {
 				ok: true,
 				status: HttpStatus.OK,
 				message: Messages.SUCCESSFULLY_UPDATED,
-				data: [result],
+				data: [{ id: result.id, name: result.name, hasPTZ: result.hasPTZ, active: result.active, roomName: result.room.name, headquarterName: result.room.headquarter.name }],
 			});
 
 		} catch (error) {
-			console.log(error)
 			if (error instanceof HttpException) throw error;
 			else this.functions.generateResponseApi({});
 		}
@@ -454,7 +502,6 @@ export class CamerasService {
 	async remove(id: string) {
 		try {
 			await this.prisma.$transaction(async (prisma) => {
-				// Verificar si la cámara existe
 				const actualCamera = await prisma.camera.findUnique({
 					where: { id },
 					include: {
@@ -468,7 +515,6 @@ export class CamerasService {
 					});
 				}
 
-				// Verificar si la cámara tiene online asociadas y activos
 				const associatedCameraOnline = await this.prisma.cameraOnline.findFirst({
 					where: { cameraId: id, current: true },
 				});
@@ -480,11 +526,6 @@ export class CamerasService {
 					});
 				}
 
-				// Eliminar los movimientos cameraOnline asociados
-				await prisma.cameraOnline.deleteMany({
-					where: { cameraId: id },
-				});
-				
 				// Eliminar los movimientos PTZ de la cámara
 				await prisma.movementsPTZ.deleteMany({
 					where: { cameraId: id },
@@ -500,7 +541,6 @@ export class CamerasService {
 					where: { id },
 				});
 
-				// Eliminar la autenticación de la cámara
 				if (actualCamera.authCameraId) {
 					await prisma.authCamera.delete({
 						where: { id: actualCamera.authCameraId },
@@ -508,7 +548,6 @@ export class CamerasService {
 				}
 			});
 
-			// Respuesta de éxito
 			this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
@@ -522,7 +561,7 @@ export class CamerasService {
 
 	async cameraFail(id: string, message: string) {
 		try {
-			const camera = await this.prisma.camera.findUnique({
+			const camera = await this.prisma.camera.findFirst({
 				where: { id }
 			});
 
@@ -549,7 +588,7 @@ export class CamerasService {
 
 			await this.prisma.cameraOnline.update({
 				where: {
-					id: cameraOnline.id
+					id: id
 				},
 				data: {
 					status: 'FAIL',
@@ -559,15 +598,15 @@ export class CamerasService {
 
 			// Enviar correo electrónico con la notificación
 			const emailOptions = {
-				to: 'auxiliar.soportetecnico@cotrafasocial.com.co', // Cambia esto por el destinatario correcto
+				to: process.env.SUPPORT_EMAIL,
 				subject: 'Notificación de Fallo en la Cámara',
 				html: this.mail.getEmailTemplate({
 					title: 'Fallo en la Cámara',
-					banner: null, // Puedes poner una URL de banner si quieres
+					banner: null,
 					subtitle: `Cámara ID: ${id}`,
 					content: 'La cámara ha fallado',
 					description: `Mensaje: ${message}`,
-					action: null, // Puedes agregar una acción si es necesario
+					action: null,
 					footer: 'Por favor, revisa el sistema.',
 				}),
 			};
@@ -584,8 +623,3 @@ export class CamerasService {
 		}
 	}
 }
-
-
-// HACER:
-
-// Si requiero una tarea en segundo plano que cada 30 segundos consulte a la base de datos y mire si hay online que hay que activar y si los hay los ejecute y si hay online para apagar y si los hay los apague con nest.js como lo hago?

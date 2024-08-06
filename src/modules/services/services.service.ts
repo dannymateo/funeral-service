@@ -19,7 +19,6 @@ export class ServicesService {
 		const { roomId, hasStreaming, startAt, endAt } = createServiceDto;
 
 		try {
-			// Verificar si la habitación existe y está activa
 			const existRoom = await this.prisma.room.findUnique({
 				where: { id: roomId },
 				select: { active: true }
@@ -50,7 +49,6 @@ export class ServicesService {
 				});
 			}
 
-			// Crear el nuevo servicio
 			const service = await this.prisma.service.create({
 				data: { roomId, hasStreaming, startAt, endAt }
 			});
@@ -59,7 +57,7 @@ export class ServicesService {
 				// Buscar una cámara asociada a la sala
 				const camera = await this.prisma.camera.findFirst({
 					where: { roomId },
-					select: { id: true } // Selecciona solo el id necesario
+					select: { id: true }
 				});
 
 				if (!camera) {

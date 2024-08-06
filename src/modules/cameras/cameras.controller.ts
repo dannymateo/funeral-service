@@ -13,9 +13,7 @@ export class CamerasController {
 	constructor(private readonly camerasService: CamerasService) {}
 
 	@Post()
-	create(
-		@Body() createCameraDto: CreateCameraDto,
-	) {
+	create(@Body() createCameraDto: CreateCameraDto) {
 		return this.camerasService.create(createCameraDto);
 	}
 
@@ -49,7 +47,6 @@ export class CamerasController {
 
 	@Patch('/cameraFail/:id')
 	cameraFail(@Param('id') id: string, @Body() cameraFailDto: CameraFailDto) {
-		console.log(cameraFailDto.message);
 		return this.camerasService.cameraFail(id, cameraFailDto.message);
 	}
 }

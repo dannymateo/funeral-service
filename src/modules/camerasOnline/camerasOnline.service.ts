@@ -2,7 +2,7 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 
-import { FunctionsService } from '../../functions/functions.service';
+import { FunctionsService } from '../functions/functions.service';
 import { Messages } from 'src/common/enums';
 
 const BASE_PATH_SH = '/var/www/cameras/cams_sh';
@@ -10,8 +10,8 @@ const BASE_PATH_LIVE = '/var/www/cameras/live';
 const BASE_PATH_SERVICE = '/etc/systemd/system';
 
 @Injectable()
-export class CameraUtilsService {
-  constructor(private readonly functions: FunctionsService) {}
+export class CameraOnlineService {
+  constructor(private readonly functions: FunctionsService) { }
 
   async createCameraOnlineService(id: string, rtspUrl: string) {
     const scriptFilePath = path.join(BASE_PATH_SH, `camOnline-${id}.sh`);
@@ -44,7 +44,7 @@ export class CameraUtilsService {
       else
         break
       fi
-    done`;    
+    done`;
 
     const serviceContent = `[Unit]
       Description=Servicio para iniciar el script cameraOnline-${id}.sh
@@ -71,7 +71,6 @@ export class CameraUtilsService {
       await fs.mkdir(cameraPathLive, { recursive: true });
       await fs.writeFile(serviceFilePath, serviceContent);
 
-      await this.functions.execCommand(`systemctl stop camOnline-${id}.service`);
       await this.functions.execCommand('systemctl daemon-reload');
 
       this.functions.generateResponseApi({
@@ -96,7 +95,17 @@ export class CameraUtilsService {
       scriptContent = scriptContent.replace(rtspUrlPattern, `ffmpeg -i ${newRtspUrl} \\`);
 
       await fs.writeFile(scriptFilePath, scriptContent);
-      await this.functions.execCommand('systemctl daemon-reload');
+
+      // Check if the service is active
+      const status: String = await this.functions.execCommand(`systemctl is-active camOnline-${id}.service`);
+
+      if (status.includes('active')) {
+        // Restart the service if it is active
+        await this.functions.execCommand(`systemctl restart camOnline-${id}.service`);
+      } else {
+        // If the service is not active, just reload the daemon
+        await this.functions.execCommand('systemctl daemon-reload');
+      }
 
       this.functions.generateResponseApi({
         ok: true,
@@ -136,6 +145,67 @@ export class CameraUtilsService {
         status: HttpStatus.INTERNAL_SERVER_ERROR,
         message: `Error deleting camera service ${id}: ${error.message}`,
       });
+    }
+  }
+
+  async upCameraOnlineService(id: string): Promise<void> {
+    const cameraPathLive = path.join(BASE_PATH_LIVE, id);
+    try {
+      // Limpia el contenido del directorio
+      await this.clearDirectoryContents(cameraPathLive);
+
+      await this.functions.execCommand(`systemctl start camOnline-${id}.service`);
+
+      // Genera una respuesta exitosa
+      this.functions.generateResponseApi({
+        ok: true,
+        status: HttpStatus.OK,
+        message: Messages.SUCCESSFUL
+      });
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      this.functions.generateResponseApi({
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: `Error starting camera service ${id}: ${error.message}`,
+      });
+    }
+  }
+
+  async downCameraOnlineService(id: string): Promise<void> {
+    const cameraPathLive = path.join(BASE_PATH_LIVE, id);
+    try {
+      // Limpia el contenido del directorio
+      await this.clearDirectoryContents(cameraPathLive);
+
+      // Detiene el servicio
+      await this.functions.execCommand(`systemctl stop camOnline-${id}.service`);
+
+      this.functions.generateResponseApi({
+        ok: true,
+        status: HttpStatus.OK,
+        message: Messages.SUCCESSFUL
+      });
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      this.functions.generateResponseApi({
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: `Error stopping camera service ${id}: ${error.message}`,
+      });
+    }
+  }
+
+  private async clearDirectoryContents(directoryPath: string): Promise<void> {
+    try {
+      // Obtiene la lista de archivos y directorios en el directorio especificado
+      const entries = await fs.readdir(directoryPath, { withFileTypes: true });
+
+      // Elimina el contenido del directorio
+      await Promise.all(entries.map(entry => {
+        const fullPath = path.join(directoryPath, entry.name);
+        return entry.isDirectory() ? fs.rmdir(fullPath, { recursive: true }) : fs.unlink(fullPath);
+      }));
+    } catch (error) {
+      throw error;
     }
   }
 }

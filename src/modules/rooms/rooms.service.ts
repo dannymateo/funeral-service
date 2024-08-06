@@ -18,7 +18,6 @@ export class RoomsService {
 		try {
 			const { name, active, headquarterId } = createRoomDto;
 
-			// Verificar si la habitación existe y está activa
 			const existHeadquarter = await this.prisma.headquarter.findUnique({
 				where: { id: headquarterId, active: true },
 			});
@@ -35,12 +34,15 @@ export class RoomsService {
 					name,
 					headquarterId: headquarterId
 				},
+				include: {
+					headquarter: true
+				},
 			});
 
 			if (duplicateRoom) {
 				this.functions.generateResponseApi({
 					status: HttpStatus.CONFLICT,
-					message: `${Messages.ERROR_CREATING} "Ya existe una sala con este nombre para esta sede."`,
+					message: `${Messages.ERROR_CREATING} "Ya existe una sala con este nombre para esta la sede de ${duplicateRoom.headquarter.name}."`,
 				});
 			}
 
@@ -50,13 +52,16 @@ export class RoomsService {
 					active,
 					headquarterId
 				},
+				include: {
+					headquarter: true
+				},
 			});
 
 			this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.CREATED,
 				message: Messages.SUCCESSFULLY_CREATED,
-				data: [roomData],
+				data: [{ id: roomData.id, name: roomData.name, active: roomData.active, headquarterName: roomData.headquarter.name }],
 			});
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
@@ -70,11 +75,11 @@ export class RoomsService {
 
 			const searchCondition = search && search.trim() !== ''
 				? { name: { contains: search.toLowerCase() } }
-				: {}; // No aplicar filtro si `search` es vacío o nulo
+				: {};
 
 			const [rooms, total] = await this.prisma.$transaction([
 				this.prisma.room.findMany({
-					where: searchCondition, // Aplica el filtro si existe `searchCondition`
+					where: searchCondition,
 					include: {
 						headquarter: {
 							select: {
@@ -89,24 +94,31 @@ export class RoomsService {
 					take: pageSize,
 				}),
 				this.prisma.room.count({
-					where: searchCondition, // Aplica el filtro si existe `searchCondition`
+					where: searchCondition,
 				}),
 			]);
 
-
-			const totalPages = Math.ceil(total / query.pageSize);
+			const totalPages = Math.ceil(total / pageSize);
 
 			if (!rooms || !rooms.length || total === 0 || totalPages === 0) {
 				this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: Messages.NO_DATA_FOUND,
 				});
+				return;
 			}
+
+			const formattedRooms = rooms.map(room => ({
+				id: room.id,
+				name: room.name,
+				active: room.active,
+				headquarterName: room.headquarter?.name || null,
+			}));
 
 			this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
-				data: rooms,
+				data: formattedRooms,
 				meta: {
 					page,
 					pageSize,
@@ -121,13 +133,21 @@ export class RoomsService {
 		}
 	}
 
+
 	async findOne(id: string) {
 		try {
 			const room = await this.prisma.room.findUnique({
 				where: {
 					id,
 				},
-				include: { headquarter: true }
+				include: {
+					headquarter: {
+						select: {
+							id: true,
+							name: true,
+						},
+					},
+				},
 			});
 
 			if (!room) {
@@ -140,7 +160,10 @@ export class RoomsService {
 			this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
-				data: [room],
+				data: [{name: room.name, active: room.active, headquarter: {
+					id: room.headquarter.id,
+					name: room.headquarter.name
+				}}],
 			});
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
@@ -173,18 +196,21 @@ export class RoomsService {
 							not: id,
 						},
 					},
+					include: {
+						headquarter: true
+					},
 				}),
 				this.prisma.room.findUnique({
 					where: {
 						id,
-					},
+					}
 				}),
 			]);
 
 			if (duplicateRoom) {
 				this.functions.generateResponseApi({
 					status: HttpStatus.CONFLICT,
-					message: `${Messages.ERROR_CREATING} "Ya existe una sala con este nombre para esta sede."`,
+					message: `${Messages.ERROR_CREATING} "Ya existe una sala con este nombre para esta la sede de ${duplicateRoom.headquarter.name}."`,
 				});
 			}
 
@@ -204,13 +230,16 @@ export class RoomsService {
 					active,
 					headquarterId
 				},
+				include: {
+					headquarter: true
+				},
 			});
 
 			this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.OK,
 				message: Messages.SUCCESSFULLY_UPDATED,
-				data: [roomData]
+				data: [{ id: roomData.id, name: roomData.name, active: roomData.active, headquarterName: roomData.headquarter.name }],
 			});
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
