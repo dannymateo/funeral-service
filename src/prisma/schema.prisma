@@ -98,8 +98,78 @@ model CameraOnline {
   @@index([cameraId])
 }
 
+model Entity {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  permissions Permission[]
+}
+
+model Role {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  permissions Permission[]
+  User        User[]
+}
+
+model Permission {
+  id        String   @id @default(uuid())
+  entityId  String
+  entity    Entity   @relation(fields: [entityId], references: [id])
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id])
+  canCreate Boolean  @default(false)
+  canRead   Boolean  @default(false)
+  canUpdate Boolean  @default(false)
+  canDelete Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id                 String    @id @default(uuid())
+  roleId             String
+  role               Role      @relation(fields: [roleId], references: [id])
+  name               String
+  email              String    @unique
+  password           String
+  lastPassword       String?
+  lastPasswordChange DateTime  @default(now())
+  loginAttempts      Int       @default(0)
+  unlockDate         DateTime?
+  active             Boolean   @default(false)
+  session            String?
+  sessionExpiration  DateTime?
+  accessToken        String?
+  refreshToken       String?
+  logged             Boolean   @default(false)
+  lastLogin          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  OtpKeys            OtpKey[]
+  services           Service[]
+}
+
+model OtpKey {
+  id        String   @id @default(uuid())
+  typeId    String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  key       String
+  active    Boolean  @default(true)
+  expiredAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Service {
-  id           String    @id @default(uuid())
+  id     String @id @default(uuid())
+  userId String
+  user         User      @relation(fields: [userId], references: [id])
   roomId       String
   room         Room      @relation(fields: [roomId], references: [id])
   // HasPersonalization           Boolean     @default(false) //Indica si tiene personalización
