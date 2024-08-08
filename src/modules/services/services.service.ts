@@ -6,6 +6,7 @@ import { UpdateServiceDto } from './dto/update-service.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { FunctionsService } from '../functions/functions.service';
 import { Messages } from 'src/common/enums';
+import { TimeService } from '../Time/time.service';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 
 @Injectable()
@@ -13,12 +14,16 @@ export class ServicesService {
 	constructor(
 		private readonly prisma: PrismaService,
 		private readonly functions: FunctionsService,
+		private readonly timeService: TimeService,
 	) { }
 
 	async create(createServiceDto: CreateServiceDto) {
 		const { roomId, hasStreaming, startAt, endAt } = createServiceDto;
+		const startAtDate = this.timeService.convertUtcToColombia(new Date(startAt));
+		const endAtDate = this.timeService.convertUtcToColombia(new Date(endAt));		
 
 		try {
+			// Verificar la existencia de la sala y si está activa, y verificar si existe un servicio en el rango de fechas especificado
 			const [existRoom, existingService] = await this.prisma.$transaction([
 				this.prisma.room.findUnique({
 					where: { id: roomId },
@@ -28,49 +33,54 @@ export class ServicesService {
 					where: {
 						roomId,
 						AND: [
-							{ startAt: { lt: endAt } },
-							{ endAt: { gt: startAt } },
+							{ startAt: { lt: endAtDate } },
+							{ endAt: { gt: startAtDate } },
 						],
 					},
 				}),
 			]);
-
+	
 			if (!existRoom || !existRoom.active) {
 				return this.functions.generateResponseApi({
 					status: HttpStatus.NOT_FOUND,
 					message: `${Messages.ERROR_CREATING} "La sala que se está asociando no existe o está inactiva."`,
 				}, 'HttpException');
 			}
-
+	
 			if (existingService) {
 				return this.functions.generateResponseApi({
 					status: HttpStatus.CONFLICT,
 					message: `${Messages.ERROR_CREATING} "Ya existe un servicio en la sala durante el período especificado."`,
 				}, 'HttpException');
 			}
-
-			// Utilizamos una transacción para asegurar que todas las operaciones se realicen correctamente
+	
+			// Utilizar una transacción para asegurar que todas las operaciones se realicen correctamente
 			const [service, cameraOnline] = await this.prisma.$transaction(async (prisma) => {
 				// Crear el servicio
 				const service = await prisma.service.create({
-					data: { roomId, hasStreaming, startAt, endAt },
+					data: {
+						roomId,
+						hasStreaming,
+						startAt: startAtDate,
+						endAt: endAtDate
+					},
 				});
-
+	
 				if (hasStreaming) {
 					// Buscar una cámara asociada a la sala
 					const camera = await prisma.camera.findFirst({
 						where: { roomId },
 						select: { id: true },
 					});
-
+	
 					if (!camera) {
 						throw new Error(`${Messages.ERROR_CREATING} "No hay una cámara asociada a esta sala."`);
 					}
-
+	
 					// Generar y encriptar la contraseña
 					const randomPassword = this.functions.generateOTP('code');
 					const hashedPassword = await hash(randomPassword, 10);
-
+	
 					// Crear el registro en cameraOnline
 					await prisma.cameraOnline.create({
 						data: {
@@ -79,20 +89,19 @@ export class ServicesService {
 							password: hashedPassword,
 						},
 					});
-
+	
 					return [service, { password: randomPassword }];
 				}
-
+	
 				return [service];
 			});
-
-			this.functions.generateResponseApi({
+	
+			return this.functions.generateResponseApi({
 				ok: true,
 				status: HttpStatus.CREATED,
 				message: Messages.SUCCESSFULLY_CREATED,
 				data: cameraOnline ? [service, cameraOnline] : [service],
 			}, 'Objet');
-
 		} catch (error) {
 			if (error instanceof HttpException) {
 				throw error;
@@ -105,6 +114,7 @@ export class ServicesService {
 			}
 		}
 	}
+	
 
 	// async findAll(query: PaginationDto) {
 	// 	try {

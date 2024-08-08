@@ -48,7 +48,7 @@ export class CreateAuthCameraDto {
 
   @ApiProperty({
     description: 'HTTP port for the camera',
-    example: 80,
+    example: 8085,
   })
   @IsInt({ message: 'HTTP port must be an integer' })
   @Min(1, { message: 'HTTP port must be at least 1' })
@@ -57,7 +57,7 @@ export class CreateAuthCameraDto {
   
   @ApiProperty({
     description: 'End Point of the image preview',
-    example: '/Streaming/channels/1/picture',
+    example: '/ISAPI/Streaming/channels/1/picture',
   })
   @IsString({ message: 'endPointImagePreview is required' })
   @MinLength(3, { message: 'endPointImagePreview must be at least 3 characters long' })
@@ -86,7 +86,7 @@ export class CreateMovementsPTZDto {
 
   @ApiProperty({
     description: 'End point of the PTZ movement command',
-    example: '/ptz/preset/1/goto',
+    example: '/ISAPI/PTZCtrl/channels/1/presets/1/goto',
   })
   @IsString({ message: 'EndPoint is required' })
   @MinLength(3, { message: 'EndPoint must be at least 3 characters long' })

@@ -159,7 +159,7 @@ export class CamerasService {
 
 		} catch (error) {
 			// Eliminar los archivos para el online de la camara
-			// await this.cameraOnline.removeCameraOnlineService(idCamera);
+			await this.cameraOnline.removeCameraOnlineService(idCamera);
 
 			if (error instanceof HttpException) throw error;
 			else return this.functions.generateResponseApi({
@@ -451,10 +451,10 @@ export class CamerasService {
 				});
 
 				// Actualizar servicios de streaming para la cámara
-				// await this.cameraOnline.updateCameraOnlineScript(
-				// 	id,
-				// 	`rtsp://${existingCamera.authCamera.userName}:${existingCamera.authCamera.password}@${existingCamera.authCamera.ipAddress}:${existingCamera.authCamera.rtspPort}${existingCamera.authCamera.endPointRtsp}`
-				// );
+				await this.cameraOnline.updateCameraOnlineScript(
+					id,
+					`rtsp://${existingCamera.authCamera.userName}:${existingCamera.authCamera.password}@${existingCamera.authCamera.ipAddress}:${existingCamera.authCamera.rtspPort}${existingCamera.authCamera.endPointRtsp}`
+				);
 
 				return updatedCamera;
 			});
@@ -565,6 +565,8 @@ export class CamerasService {
 						where: { id: actualCamera.authCameraId },
 					});
 				}
+
+				await this.cameraOnline.removeCameraOnlineService(id);
 			});
 
 			return this.functions.generateResponseApi({

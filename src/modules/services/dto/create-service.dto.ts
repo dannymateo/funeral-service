@@ -22,14 +22,14 @@ export class CreateServiceDto {
 
   @ApiProperty({
     description: 'Start date and time of the service',
-    example: '2024-08-02T12:00:00Z',
+    example: '2024-08-08T12:20:00.000',
   })
   @IsDateString({}, { message: 'StartAt must be a valid ISO date string' })
   readonly startAt: string;
 
   @ApiProperty({
     description: 'End date and time of the service',
-    example: '2024-08-02T14:00:00Z',
+    example: '2024-08-08T12:20:00.000',
   })
   @IsDateString({}, { message: 'EndAt must be a valid ISO date string' })
   readonly endAt: string;
