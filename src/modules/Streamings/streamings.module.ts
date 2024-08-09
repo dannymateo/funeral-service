@@ -4,7 +4,7 @@ import { StreamingsController } from './streamings.controller';
 import { StreamingsService } from './streamings.service';
 
 @Module({
-	controllers: [StreamingsController],
-	providers: [StreamingsService],
+  controllers: [StreamingsController],
+  providers: [StreamingsService],
 })
-export class StreamingsModule { }
+export class StreamingsModule {}

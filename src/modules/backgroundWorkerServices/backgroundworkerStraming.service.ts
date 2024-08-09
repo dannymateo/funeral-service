@@ -4,7 +4,7 @@ import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { CameraOnlineService } from '../camerasOnline/camerasOnline.service';
 import { MailService } from '../mail/mail.service';
-import { TimeService } from '../Time/time.service';
+import { TimeService } from '../time/time.service';
 
 @Injectable()
 export class BackgroundWorkerStreamingService {

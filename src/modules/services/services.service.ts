@@ -6,7 +6,7 @@ import { UpdateServiceDto } from './dto/update-service.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { FunctionsService } from '../functions/functions.service';
 import { Messages } from 'src/common/enums';
-import { TimeService } from '../Time/time.service';
+import { TimeService } from '../time/time.service';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 
 @Injectable()

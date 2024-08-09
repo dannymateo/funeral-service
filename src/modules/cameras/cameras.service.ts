@@ -107,8 +107,15 @@ export class CamerasService {
 								},
 							},
 						},
+						authCamera: true
 					},
 				});
+
+				// crear los servicios de streaming para la cámara
+				await this.cameraOnline.updateCameraOnlineScript(
+					idCamera,
+					`rtsp://${authCameraCreate.userName}:${authCameraCreate.password}@${authCameraCreate.ipAddress}:${authCameraCreate.rtspPort}${authCameraCreate.endPointRtsp}`
+				);
 
 				return cameraData;
 			});
