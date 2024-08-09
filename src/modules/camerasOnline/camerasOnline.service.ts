@@ -5,18 +5,22 @@ import * as path from 'path';
 import { FunctionsService } from '../functions/functions.service';
 import { Messages } from 'src/common/enums';
 
-const BASE_PATH_SH = process.env.BASE_PATH_SH
-const BASE_PATH_LIVE = process.env.BASE_PATH_LIVE
-const BASE_PATH_SERVICE = process.env.BASE_PATH_SERVICE
-
 @Injectable()
 export class CameraOnlineService {
-  constructor(private readonly functions: FunctionsService) { }
+  private readonly BASE_PATH_SH: string;
+  private readonly BASE_PATH_LIVE: string;
+  private readonly BASE_PATH_SERVICE: string;
+
+  constructor(private readonly functions: FunctionsService) {
+    this.BASE_PATH_SH = process.env.BASE_PATH_SH || '/default/sh/path';
+    this.BASE_PATH_LIVE = process.env.BASE_PATH_LIVE || '/default/live/path';
+    this.BASE_PATH_SERVICE = process.env.BASE_PATH_SERVICE || '/default/service/path';
+  }
 
   async createCameraOnlineService(id: string, rtspUrl: string) {
-    const scriptFilePath = path.join(BASE_PATH_SH, `camOnline-${id}.sh`);
-    const cameraPathLive = path.join(BASE_PATH_LIVE, id);
-    const serviceFilePath = path.join(BASE_PATH_SERVICE, `camOnline-${id}.service`);
+    const scriptFilePath = path.join(this.BASE_PATH_SH, `camOnline-${id}.sh`);
+    const cameraPathLive = path.join(this.BASE_PATH_LIVE, id);
+    const serviceFilePath = path.join(this.BASE_PATH_SERVICE, `camOnline-${id}.service`);
 
     const scriptContent = `#!/bin/bash
     NOTIFY_URL="http://localhost:3000/api/v1/cameras/cameraFail/${id}"
@@ -58,9 +62,9 @@ export class CameraOnlineService {
       WantedBy=multi-user.target`;
 
     try {
-      await this.functions.ensureDirectoryExists(BASE_PATH_SH);
-      await this.functions.ensureDirectoryExists(BASE_PATH_LIVE);
-      await this.functions.ensureDirectoryExists(BASE_PATH_SERVICE);
+      await this.functions.ensureDirectoryExists(this.BASE_PATH_SH);
+      await this.functions.ensureDirectoryExists(this.BASE_PATH_LIVE);
+      await this.functions.ensureDirectoryExists(this.BASE_PATH_SERVICE);
 
       if (await fs.stat(scriptFilePath).catch(() => false)) {
         throw new Error(`Script ${scriptFilePath} already exists`);
@@ -89,7 +93,7 @@ export class CameraOnlineService {
   }
 
   async updateCameraOnlineScript(id: string, newRtspUrl: string) {
-    const scriptFilePath = path.join(BASE_PATH_SH, `camOnline-${id}.sh`);
+    const scriptFilePath = path.join(this.BASE_PATH_SH, `camOnline-${id}.sh`);
     try {
       let scriptContent = await fs.readFile(scriptFilePath, 'utf-8');
       const rtspUrlPattern = /ffmpeg -i (.*) \\/;
@@ -124,9 +128,9 @@ export class CameraOnlineService {
   }
 
   async removeCameraOnlineService(id: string) {
-    const scriptFilePath = path.join(BASE_PATH_SH, `camOnline-${id}.sh`);
-    const cameraPathLive = path.join(BASE_PATH_LIVE, id);
-    const serviceFilePath = path.join(BASE_PATH_SERVICE, `camOnline-${id}.service`);
+    const scriptFilePath = path.join(this.BASE_PATH_SH, `camOnline-${id}.sh`);
+    const cameraPathLive = path.join(this.BASE_PATH_LIVE, id);
+    const serviceFilePath = path.join(this.BASE_PATH_SERVICE, `camOnline-${id}.service`);
 
     try {
       await fs.unlink(scriptFilePath);
@@ -152,7 +156,7 @@ export class CameraOnlineService {
   }
 
   async upCameraOnlineService(id: string): Promise<void> {
-    const cameraPathLive = path.join(BASE_PATH_LIVE, id);
+    const cameraPathLive = path.join(this.BASE_PATH_LIVE, id);
 
     try {
       // Limpia el contenido del directorio
@@ -181,7 +185,7 @@ export class CameraOnlineService {
   }
 
   async downCameraOnlineService(id: string): Promise<void> {
-    const cameraPathLive = path.join(BASE_PATH_LIVE, id);
+    const cameraPathLive = path.join(this.BASE_PATH_LIVE, id);
     try {
       // Limpia el contenido del directorio
       await this.clearDirectoryContents(cameraPathLive);
