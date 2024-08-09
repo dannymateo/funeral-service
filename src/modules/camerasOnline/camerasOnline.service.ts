@@ -5,9 +5,9 @@ import * as path from 'path';
 import { FunctionsService } from '../functions/functions.service';
 import { Messages } from 'src/common/enums';
 
-const BASE_PATH_SH = '/var/www/cameras/cams_sh';
-const BASE_PATH_LIVE = '/var/www/cameras/live';
-const BASE_PATH_SERVICE = '/etc/systemd/system';
+const BASE_PATH_SH = process.env.BASE_PATH_SH
+const BASE_PATH_LIVE = process.env.BASE_PATH_LIVE
+const BASE_PATH_SERVICE = process.env.BASE_PATH_SERVICE
 
 @Injectable()
 export class CameraOnlineService {

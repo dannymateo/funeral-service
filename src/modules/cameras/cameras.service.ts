@@ -112,7 +112,7 @@ export class CamerasService {
 				});
 
 				// crear los servicios de streaming para la cámara
-				await this.cameraOnline.updateCameraOnlineScript(
+				await this.cameraOnline.createCameraOnlineService(
 					idCamera,
 					`rtsp://${authCameraCreate.userName}:${authCameraCreate.password}@${authCameraCreate.ipAddress}:${authCameraCreate.rtspPort}${authCameraCreate.endPointRtsp}`
 				);
@@ -165,6 +165,7 @@ export class CamerasService {
 			}, 'Objet');
 
 		} catch (error) {
+			console.log(error)
 			// Eliminar los archivos para el online de la camara
 			await this.cameraOnline.removeCameraOnlineService(idCamera);
 
